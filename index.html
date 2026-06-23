@@ -187,7 +187,7 @@
     .waypoint-coords { font-size: 13px; color: var(--ocean); font-family: monospace; margin-bottom: 6px; }
     .waypoint-leg { font-size: 12px; color: var(--text-light); display: flex; gap: 14px; flex-wrap: wrap; }
     .waypoint-actions { display: flex; gap: 6px; margin-top: 10px; }
-    .map-container { height: 220px; border-radius: 10px; overflow: hidden; margin-bottom: 14px; border: 2px solid var(--border); }
+    .map-container { height: clamp(280px, 50vh, 420px); border-radius: 10px; overflow: hidden; margin-bottom: 14px; border: 2px solid var(--border); }
     .bearing-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--navy); color: white; padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600; }
     .bearing-pill i { color: var(--gold); }
 
@@ -381,10 +381,11 @@
         <label>Client ID OAuth 2.0</label>
         <input type="text" id="s-client-id" placeholder="xxxx.apps.googleusercontent.com">
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="DriveModule.connect()"><i class="fa-brands fa-google"></i> Connetti</button>
         <button class="btn btn-secondary btn-sm" onclick="DriveModule.disconnect()">Disconnetti</button>
         <button class="btn btn-success btn-sm" onclick="DriveModule.syncNow()" id="btn-sync-now" style="display:none"><i class="fa-solid fa-rotate"></i> Sincronizza ora</button>
+        <button class="btn btn-secondary btn-sm" onclick="DriveModule.loadFromDrive()" id="btn-load-drive" style="display:none"><i class="fa-solid fa-cloud-arrow-down"></i> Carica da Drive</button>
       </div>
       <div id="drive-user-info" style="margin-top:10px;font-size:13px;color:var(--success)"></div>
     </div>
@@ -632,7 +633,7 @@ const App = {
     if(section==='diario') DiarioModule.render();
     if(section==='note') NoteModule.render();
     if(section==='checklist') ChecklistModule.render();
-    if(section==='rotta') PassageModule.render();
+    if(section==='rotta'){PassageModule.render();setTimeout(()=>{if(PassageModule._map)PassageModule._map.invalidateSize();},150);}
     if(section==='home') this.updateStats();
   },
   showSettings() {
@@ -1224,43 +1225,51 @@ const PassageModule = {
 const DriveModule = {
   _accessToken:null, _folderId:null, _syncTimer:null,
   FOLDER:'VoyageLog', FILE:'voyagelog_data.json',
-  init() { this.updateStatus(); },
+  init() { this.updateStatus(); setTimeout(()=>this.tryAutoConnect(),1000); },
   updateStatus() {
     const msgEl=document.getElementById('drive-status-msg');
     const userEl=document.getElementById('drive-user-info');
     const btnSync=document.getElementById('btn-sync-now');
+    const btnLoad=document.getElementById('btn-load-drive');
     if(this._accessToken){
-      if(msgEl)msgEl.innerHTML='<i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Connesso a Google Drive — i dati si sincronizzano automaticamente.';
+      if(msgEl)msgEl.innerHTML='<i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Connesso a Google Drive — sincronizzazione bidirezionale attiva.';
       if(userEl)userEl.textContent='✓ Connesso';
       if(btnSync)btnSync.style.display='inline-flex';
+      if(btnLoad)btnLoad.style.display='inline-flex';
     } else {
       if(msgEl)msgEl.textContent='Non connesso — vai in Impostazioni per sincronizzare su Drive.';
       if(userEl)userEl.textContent='';
       if(btnSync)btnSync.style.display='none';
+      if(btnLoad)btnLoad.style.display='none';
     }
   },
-  connect() {
-    const clientId=document.getElementById('s-client-id').value.trim();
-    if(!clientId){App.toast('Inserisci il Client ID!','error');return;}
+  connect(silent=false) {
+    const clientId=(document.getElementById('s-client-id')?.value||'').trim()||DB.get('settings').driveClientId;
+    if(!clientId){if(!silent)App.toast('Inserisci il Client ID!','error');return;}
     const s=DB.get('settings'); s.driveClientId=clientId; DB.set('settings',s);
     const load=()=>{
       this._tokenClient=google.accounts.oauth2.initTokenClient({
         client_id:clientId,
         scope:'https://www.googleapis.com/auth/drive.file',
         callback:(resp)=>{
-          if(resp.error){App.toast('Errore: '+resp.error,'error');return;}
+          if(resp.error){
+            if(!silent)App.toast('Errore: '+resp.error,'error');
+            return;
+          }
           this._accessToken=resp.access_token;
-          this.updateStatus(); App.toast('Connesso a Google Drive!','success');
+          this.updateStatus();
+          if(!silent)App.toast('Connesso a Google Drive!','success');
+          // Prima scarica da Drive, poi sincronizza
           this.syncNow();
         }
       });
-      this._tokenClient.requestAccessToken();
+      this._tokenClient.requestAccessToken({prompt: silent?'none':''});
     };
     if(window.google?.accounts?.oauth2){load();}
     else{
-      const s=document.createElement('script');
-      s.src='https://accounts.google.com/gsi/client';
-      s.onload=load; document.head.appendChild(s);
+      const sc=document.createElement('script');
+      sc.src='https://accounts.google.com/gsi/client';
+      sc.onload=load; document.head.appendChild(sc);
     }
   },
   disconnect() {
@@ -1277,13 +1286,97 @@ const DriveModule = {
     try {
       if(!this._folderId)this._folderId=await this._findOrCreateFolder();
       const fileId=await this._findFile(this._folderId);
+      // 1. Scarica i dati da Drive e fondili con quelli locali
+      if(fileId){
+        const driveData=await this._downloadFile(fileId);
+        if(driveData) this._mergeData(driveData);
+      }
+      // 2. Carica il risultato unificato su Drive
       const content=JSON.stringify(DB._data,null,2);
       if(fileId)await this._updateFile(fileId,content);
       else await this._createFile(this._folderId,content);
+      // 3. Aggiorna l'interfaccia con i dati aggiornati
+      App.updateStats();
+      if(App.currentSection==='diario')DiarioModule.render();
+      if(App.currentSection==='note')NoteModule.render();
+      if(App.currentSection==='checklist')ChecklistModule.render();
+      if(App.currentSection==='rotta')PassageModule.render();
       App.toast('Sincronizzato con Drive!','success');
     } catch(e) {
       console.error(e); App.toast('Errore sincronizzazione Drive','error');
     }
+  },
+  async loadFromDrive() {
+    if(!this._accessToken){App.toast('Non connesso a Drive','error');return;}
+    if(!confirm('Scaricare i dati da Google Drive? I dati locali verranno aggiornati con quelli di Drive.'))return;
+    try {
+      if(!this._folderId)this._folderId=await this._findOrCreateFolder();
+      const fileId=await this._findFile(this._folderId);
+      if(!fileId){App.toast('Nessun file trovato su Drive','error');return;}
+      const driveData=await this._downloadFile(fileId);
+      if(!driveData){App.toast('Impossibile leggere il file da Drive','error');return;}
+      this._mergeData(driveData);
+      App.updateStats();
+      if(App.currentSection==='diario')DiarioModule.render();
+      if(App.currentSection==='note')NoteModule.render();
+      if(App.currentSection==='checklist')ChecklistModule.render();
+      if(App.currentSection==='rotta')PassageModule.render();
+      App.toast('Dati scaricati da Drive!','success');
+    } catch(e) {
+      console.error(e); App.toast('Errore nel download da Drive','error');
+    }
+  },
+  async _downloadFile(fileId) {
+    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{
+      headers:{'Authorization':'Bearer '+this._accessToken}
+    });
+    if(!r.ok)return null;
+    try{return await r.json();}catch{return null;}
+  },
+  _mergeData(driveData) {
+    if(!driveData)return;
+    DB._data.diary   = this._mergeById(DB._data.diary||[], driveData.diary||[]);
+    DB._data.notes   = this._mergeById(DB._data.notes||[], driveData.notes||[]);
+    DB._data.waypoints = this._mergeById(DB._data.waypoints||[], driveData.waypoints||[]);
+    DB._data.checklist = this._mergeChecklist(DB._data.checklist||[], driveData.checklist||[]);
+    DB.save();
+  },
+  _mergeById(local, remote) {
+    const map=new Map();
+    // Prima i remoti, poi i locali sovrascrivono se più recenti
+    remote.forEach(item=>map.set(item.id,item));
+    local.forEach(item=>{
+      const rem=map.get(item.id);
+      if(!rem){map.set(item.id,item);return;}
+      const lt=new Date(item.updatedAt||item.createdAt||0).getTime();
+      const rt=new Date(rem.updatedAt||rem.createdAt||0).getTime();
+      map.set(item.id, lt>=rt?item:rem);
+    });
+    return Array.from(map.values());
+  },
+  _mergeChecklist(local, remote) {
+    const catMap=new Map();
+    remote.forEach(cat=>catMap.set(cat.id,{...cat,items:[...cat.items]}));
+    local.forEach(cat=>{
+      if(!catMap.has(cat.id)){catMap.set(cat.id,cat);return;}
+      const remCat=catMap.get(cat.id);
+      const itemMap=new Map();
+      remCat.items.forEach(i=>itemMap.set(i.id,i));
+      cat.items.forEach(i=>itemMap.set(i.id,i));
+      catMap.set(cat.id,{...remCat,items:Array.from(itemMap.values())});
+    });
+    return Array.from(catMap.values());
+  },
+  // Tenta riconnessione silenziosa all'avvio se il Client ID è già salvato
+  tryAutoConnect() {
+    const clientId=DB.get('settings').driveClientId;
+    if(!clientId)return;
+    const sc=document.createElement('script');
+    sc.src='https://accounts.google.com/gsi/client';
+    sc.onload=()=>{
+      try{this.connect(true);}catch(e){}
+    };
+    document.head.appendChild(sc);
   },
   async _call(url,opts={}) {
     const r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+this._accessToken,...(opts.headers||{})}});
