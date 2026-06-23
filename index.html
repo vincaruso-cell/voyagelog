@@ -238,7 +238,8 @@
 <!-- HEADER -->
 <header id="app-header">
   <h1><i class="fa-solid fa-anchor"></i> VoyageLog</h1>
-  <div id="header-actions">
+  <div id="header-actions" style="display:flex;align-items:center;gap:4px">
+    <i class="fa-brands fa-google-drive" id="drive-header-icon" style="font-size:16px;color:rgba(255,255,255,0.3);transition:color 0.3s" title="Drive: non connesso"></i>
     <button onclick="App.showSettings()" title="Impostazioni"><i class="fa-solid fa-gear"></i></button>
   </div>
 </header>
@@ -800,7 +801,7 @@ const DiarioModule = {
     DB.set('diary',DB.get('diary').filter(e=>e.id!==this._editingId));
     App.closeModal('modal-diary');
     App.toast('Voce eliminata');
-    this.render(); App.updateStats();
+    this.render(); App.updateStats(); DriveModule.syncIfConnected();
   },
   viewEntry(id) {
     const e=DB.get('diary').find(x=>x.id===id); if(!e)return;
@@ -938,7 +939,7 @@ const NoteModule = {
   deleteNote(id) {
     if(!confirm('Eliminare questa nota?'))return;
     DB.set('notes',DB.get('notes').filter(n=>n.id!==id));
-    App.toast('Nota eliminata'); this.render(); App.updateStats();
+    App.toast('Nota eliminata'); this.render(); App.updateStats(); DriveModule.syncIfConnected();
   }
 };
 
@@ -1003,12 +1004,12 @@ const ChecklistModule = {
     const text=input.value.trim(); if(!text)return;
     const cl=DB.get('checklist'); const cat=cl.find(c=>c.id===catId); if(!cat)return;
     cat.items.push({id:DB.uid(),text,checked:false});
-    DB.set('checklist',cl); input.value=''; this.render(); App.updateStats();
+    DB.set('checklist',cl); input.value=''; this.render(); App.updateStats(); DriveModule.syncIfConnected();
   },
   deleteItem(catId,itemId) {
     const cl=DB.get('checklist'); const cat=cl.find(c=>c.id===catId); if(!cat)return;
     cat.items=cat.items.filter(i=>i.id!==itemId);
-    DB.set('checklist',cl); this.render(); App.updateStats();
+    DB.set('checklist',cl); this.render(); App.updateStats(); DriveModule.syncIfConnected();
   },
   addCategory() {
     this._selectedIcon='⭐'; document.getElementById('cat-name').value='';
@@ -1026,18 +1027,18 @@ const ChecklistModule = {
     const cl=DB.get('checklist');
     cl.push({id:DB.uid(),name,icon:this._selectedIcon,items:[]});
     DB.set('checklist',cl); App.closeModal('modal-category'); this.render();
-    App.toast('Categoria creata!','success');
+    App.toast('Categoria creata!','success'); DriveModule.syncIfConnected();
   },
   deleteCategory(catId) {
     if(!confirm('Eliminare questa categoria e tutti gli elementi?'))return;
     DB.set('checklist',DB.get('checklist').filter(c=>c.id!==catId));
-    this.render(); App.updateStats(); App.toast('Categoria eliminata');
+    this.render(); App.updateStats(); App.toast('Categoria eliminata'); DriveModule.syncIfConnected();
   },
   resetAll() {
     if(!confirm('Deselezionare tutti gli elementi?'))return;
     const cl=DB.get('checklist');
     cl.forEach(cat=>cat.items.forEach(item=>item.checked=false));
-    DB.set('checklist',cl); this.render(); App.updateStats(); App.toast('Reset effettuato');
+    DB.set('checklist',cl); this.render(); App.updateStats(); App.toast('Reset effettuato'); DriveModule.syncIfConnected();
   }
 };
 
@@ -1202,12 +1203,12 @@ const PassageModule = {
   deleteWaypoint(id) {
     if(!confirm('Eliminare questo waypoint?'))return;
     DB.set('waypoints',DB.get('waypoints').filter(w=>w.id!==id));
-    App.toast('Waypoint eliminato'); this.render(); App.updateStats();
+    App.toast('Waypoint eliminato'); this.render(); App.updateStats(); DriveModule.syncIfConnected();
   },
   moveWp(id,dir) {
     const wps=DB.get('waypoints'); const idx=wps.findIndex(w=>w.id===id); if(idx<0)return;
     const ni=idx+dir; if(ni<0||ni>=wps.length)return;
-    [wps[idx],wps[ni]]=[wps[ni],wps[idx]]; DB.set('waypoints',wps); this.render();
+    [wps[idx],wps[ni]]=[wps[ni],wps[idx]]; DB.set('waypoints',wps); this.render(); DriveModule.syncIfConnected();
   },
   exportGPX() {
     const wps=DB.get('waypoints'); if(!wps.length){App.toast('Nessun waypoint!','error');return;}
@@ -1246,16 +1247,19 @@ const DriveModule = {
     const userEl=document.getElementById('drive-user-info');
     const btnSync=document.getElementById('btn-sync-now');
     const btnLoad=document.getElementById('btn-load-drive');
+    const hdrIcon=document.getElementById('drive-header-icon');
     if(this._accessToken){
-      if(msgEl)msgEl.innerHTML='<i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Connesso a Google Drive — sincronizzazione bidirezionale attiva.';
+      if(msgEl)msgEl.innerHTML='<i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Connesso a Google Drive.';
       if(userEl)userEl.textContent='✓ Connesso';
       if(btnSync)btnSync.style.display='inline-flex';
       if(btnLoad)btnLoad.style.display='inline-flex';
+      if(hdrIcon)hdrIcon.style.color='#27ae60';
     } else {
       if(msgEl)msgEl.textContent='Non connesso — vai in Impostazioni per sincronizzare su Drive.';
       if(userEl)userEl.textContent='';
       if(btnSync)btnSync.style.display='none';
       if(btnLoad)btnLoad.style.display='none';
+      if(hdrIcon)hdrIcon.style.color='rgba(255,255,255,0.3)';
     }
   },
   connect(silent=false) {
@@ -1306,10 +1310,18 @@ const DriveModule = {
       const content=JSON.stringify(DB._data,null,2);
       if(fileId)await this._updateFile(fileId,content);
       else await this._createFile(this._folderId,content);
-      // Nessun toast per non interrompere l'utente ad ogni salvataggio
+      this._setDriveIcon('ok');
     } catch(e) {
       console.error('Push Drive error:',e);
-      App.toast('Errore invio a Drive','error');
+      // Se il token è scaduto, prova a rinnovarlo e riprova una volta
+      if(e.message==='401'){
+        const renewed=await this._refreshToken();
+        if(renewed){try{await this.pushToDrive();}catch{}}
+        else{this._setDriveIcon('error');App.toast('Token Drive scaduto — riconnettiti in Impostazioni','error');}
+      } else {
+        this._setDriveIcon('error');
+        App.toast('Errore invio a Drive: '+e.message,'error');
+      }
     }
   },
   async syncNow() {
@@ -1361,9 +1373,16 @@ const DriveModule = {
     }
   },
   async _downloadFile(fileId) {
-    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{
+    let r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{
       headers:{'Authorization':'Bearer '+this._accessToken}
     });
+    if(r.status===401){
+      const ok=await this._refreshToken();
+      if(!ok)return null;
+      r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{
+        headers:{'Authorization':'Bearer '+this._accessToken}
+      });
+    }
     if(!r.ok)return null;
     try{return await r.json();}catch{return null;}
   },
@@ -1417,8 +1436,32 @@ const DriveModule = {
     };
     document.head.appendChild(sc);
   },
+  async _refreshToken() {
+    return new Promise(resolve=>{
+      if(!this._tokenClient){this._accessToken=null;this.updateStatus();resolve(false);return;}
+      const prev=this._tokenClient.callback;
+      this._tokenClient.callback=resp=>{
+        this._tokenClient.callback=prev;
+        if(resp.error){this._accessToken=null;this.updateStatus();resolve(false);}
+        else{this._accessToken=resp.access_token;resolve(true);}
+      };
+      this._tokenClient.requestAccessToken({prompt:''});
+    });
+  },
+  _setDriveIcon(state) {
+    const el=document.getElementById('drive-header-icon');
+    if(!el)return;
+    if(state==='ok') { el.style.color='#27ae60'; el.title='Drive: sincronizzato'; }
+    else if(state==='error') { el.style.color='#e74c3c'; el.title='Drive: errore'; }
+    else { el.style.color='#f39c12'; el.title='Drive: sincronizzazione...'; }
+  },
   async _call(url,opts={}) {
-    const r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+this._accessToken,...(opts.headers||{})}});
+    let r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+this._accessToken,...(opts.headers||{})}});
+    if(r.status===401){
+      const ok=await this._refreshToken();
+      if(!ok)throw new Error('401');
+      r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+this._accessToken,...(opts.headers||{})}});
+    }
     if(!r.ok)throw new Error(r.status);
     return r.json();
   },
@@ -1439,10 +1482,12 @@ const DriveModule = {
     form.append('metadata',new Blob([JSON.stringify({name:this.FILE,parents:[folderId]})],{type:'application/json'}));
     form.append('file',new Blob([content],{type:'application/json'}));
     const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',headers:{'Authorization':'Bearer '+this._accessToken},body:form});
+    if(r.status===401)throw new Error('401');
     if(!r.ok)throw new Error(r.status);
   },
   async _updateFile(fileId,content) {
     const r=await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,{method:'PATCH',headers:{'Authorization':'Bearer '+this._accessToken,'Content-Type':'application/json'},body:content});
+    if(r.status===401)throw new Error('401');
     if(!r.ok)throw new Error(r.status);
   }
 };
