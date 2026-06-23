@@ -1292,30 +1292,49 @@ const DriveModule = {
     this.updateStatus(); App.toast('Disconnesso da Drive');
   },
   syncIfConnected() {
+    // Dopo un salvataggio locale: solo upload, senza scaricare da Drive
     if(!this._accessToken)return;
     clearTimeout(this._syncTimer);
-    this._syncTimer=setTimeout(()=>this.syncNow(),3000);
+    this._syncTimer=setTimeout(()=>this.pushToDrive(),3000);
+  },
+  async pushToDrive() {
+    // Carica i dati locali su Drive senza scaricare nulla (evita sovrascritture)
+    if(!this._accessToken)return;
+    try {
+      if(!this._folderId)this._folderId=await this._findOrCreateFolder();
+      const fileId=await this._findFile(this._folderId);
+      const content=JSON.stringify(DB._data,null,2);
+      if(fileId)await this._updateFile(fileId,content);
+      else await this._createFile(this._folderId,content);
+      // Nessun toast per non interrompere l'utente ad ogni salvataggio
+    } catch(e) {
+      console.error('Push Drive error:',e);
+      App.toast('Errore invio a Drive','error');
+    }
   },
   async syncNow() {
+    // Sincronizzazione completa: scarica da Drive, fonde, carica
+    // Usata solo all'avvio e quando l'utente preme "Sincronizza ora"
     if(!this._accessToken){App.toast('Non connesso a Drive','error');return;}
     try {
       if(!this._folderId)this._folderId=await this._findOrCreateFolder();
       const fileId=await this._findFile(this._folderId);
-      // 1. Scarica i dati da Drive e fondili con quelli locali
       if(fileId){
         const driveData=await this._downloadFile(fileId);
-        if(driveData) this._mergeData(driveData);
+        if(driveData)this._mergeData(driveData);
       }
-      // 2. Carica il risultato unificato su Drive
       const content=JSON.stringify(DB._data,null,2);
       if(fileId)await this._updateFile(fileId,content);
       else await this._createFile(this._folderId,content);
-      // 3. Aggiorna l'interfaccia con i dati aggiornati
+      // Salva il momento dell'ultima sync riuscita (usato dal merge)
+      DB._data.settings.lastSyncedAt=new Date().toISOString();
+      DB.save();
       App.updateStats();
-      if(App.currentSection==='diario')DiarioModule.render();
-      if(App.currentSection==='note')NoteModule.render();
-      if(App.currentSection==='checklist')ChecklistModule.render();
-      if(App.currentSection==='rotta')PassageModule.render();
+      const s=App.currentSection;
+      if(s==='diario')DiarioModule.render();
+      if(s==='note')NoteModule.render();
+      if(s==='checklist')ChecklistModule.render();
+      if(s==='rotta')PassageModule.render();
       App.toast('Sincronizzato con Drive!','success');
     } catch(e) {
       console.error(e); App.toast('Errore sincronizzazione Drive','error');
@@ -1350,26 +1369,30 @@ const DriveModule = {
   },
   _mergeData(driveData) {
     if(!driveData)return;
-    DB._data.diary   = this._mergeById(DB._data.diary||[], driveData.diary||[]);
-    DB._data.notes   = this._mergeById(DB._data.notes||[], driveData.notes||[]);
-    DB._data.waypoints = this._mergeById(DB._data.waypoints||[], driveData.waypoints||[]);
-    DB._data.checklist = this._mergeChecklist(DB._data.checklist||[], driveData.checklist||[]);
+    // lastSyncedAt = momento dell'ultima sync riuscita su questo dispositivo
+    const lastSync=new Date(DB._data.settings?.lastSyncedAt||0).getTime();
+    DB._data.diary     =this._mergeById(DB._data.diary||[],     driveData.diary||[],     lastSync);
+    DB._data.notes     =this._mergeById(DB._data.notes||[],     driveData.notes||[],     lastSync);
+    DB._data.waypoints =this._mergeById(DB._data.waypoints||[], driveData.waypoints||[], lastSync);
+    DB._data.checklist =this._mergeChecklist(DB._data.checklist||[], driveData.checklist||[], lastSync);
     DB.save();
   },
-  _mergeById(local, remote) {
+  _mergeById(local, remote, lastSync) {
     const map=new Map();
-    // Prima i remoti, poi i locali sovrascrivono se più recenti
     remote.forEach(item=>map.set(item.id,item));
     local.forEach(item=>{
       const rem=map.get(item.id);
-      if(!rem){map.set(item.id,item);return;}
+      if(!rem){map.set(item.id,item);return;} // solo locale: aggiunto sempre
       const lt=new Date(item.updatedAt||item.createdAt||0).getTime();
       const rt=new Date(rem.updatedAt||rem.createdAt||0).getTime();
+      // Se l'item locale è stato modificato DOPO l'ultima sync, vince il locale
+      if(lt>lastSync){map.set(item.id,item);return;}
+      // Altrimenti vince il più recente tra locale e Drive
       map.set(item.id, lt>=rt?item:rem);
     });
     return Array.from(map.values());
   },
-  _mergeChecklist(local, remote) {
+  _mergeChecklist(local, remote, lastSync) {
     const catMap=new Map();
     remote.forEach(cat=>catMap.set(cat.id,{...cat,items:[...cat.items]}));
     local.forEach(cat=>{
@@ -1377,6 +1400,7 @@ const DriveModule = {
       const remCat=catMap.get(cat.id);
       const itemMap=new Map();
       remCat.items.forEach(i=>itemMap.set(i.id,i));
+      // Gli item locali vincono sempre (checklist modificata su questo dispositivo)
       cat.items.forEach(i=>itemMap.set(i.id,i));
       catMap.set(cat.id,{...remCat,items:Array.from(itemMap.values())});
     });
