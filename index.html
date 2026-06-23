@@ -354,7 +354,13 @@
         <span style="font-size:14px;color:var(--text-light)">nodi</span>
       </div>
     </div>
-    <div class="map-container" id="passage-map"></div>
+    <div style="position:relative;margin-bottom:14px">
+      <div class="map-container" id="passage-map" style="margin-bottom:0"></div>
+      <div id="map-pick-banner" style="display:none;position:absolute;top:8px;left:8px;right:8px;background:rgba(26,58,92,0.92);color:white;padding:10px 14px;border-radius:8px;z-index:1000;align-items:center;justify-content:space-between;gap:10px">
+        <span style="font-size:13px;display:flex;align-items:center;gap:8px"><i class="fa-solid fa-crosshairs"></i> Tocca la mappa per scegliere la posizione</span>
+        <button onclick="PassageModule.cancelPick()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);color:white;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap">Annulla</button>
+      </div>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <p class="section-title" style="margin:0">Waypoint rotta</p>
       <button class="btn btn-primary btn-sm" onclick="PassageModule.openAddWaypoint()"><i class="fa-solid fa-map-pin"></i> Aggiungi</button>
@@ -1040,7 +1046,7 @@ const ChecklistModule = {
 // ─────────────────────────────────────────
 const PassageModule = {
   _map:null, _mapPicker:null, _pickerMarker:null, _pickedCoords:null,
-  _routeLine:null, _markers:[],
+  _routeLine:null, _markers:[], _pickMode:false, _pickMarker:null,
   init() {},
   render() {
     this.updateStats(); this.renderWaypoints(); this.initMap();
@@ -1049,6 +1055,22 @@ const PassageModule = {
     if(!this._map) {
       this._map=L.map('passage-map',{zoomControl:true}).setView([41.9,12.5],5);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(this._map);
+      this._map.on('click',(e)=>{
+        if(!this._pickMode)return;
+        this._pickMode=false;
+        document.getElementById('map-pick-banner').style.display='none';
+        this._map.getContainer().style.cursor='';
+        // Mostra marker temporaneo sulla posizione scelta
+        if(this._pickMarker)this._pickMarker.remove();
+        this._pickMarker=L.marker(e.latlng,{
+          icon:L.divIcon({className:'',html:'<div style="background:#f39c12;width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4)"></div>',iconSize:[18,18],iconAnchor:[9,9]})
+        }).addTo(this._map);
+        // Inserisce le coordinate nel form e riapre il modale
+        document.getElementById('wp-lat').value=e.latlng.lat.toFixed(6);
+        document.getElementById('wp-lon').value=e.latlng.lng.toFixed(6);
+        App.openModal('modal-waypoint');
+        App.toast('Posizione selezionata!','success');
+      });
     }
     this.updateMapMarkers();
   },
@@ -1148,27 +1170,20 @@ const PassageModule = {
     },()=>App.toast('GPS non disponibile','error'));
   },
   openMapPicker() {
-    App.openModal('modal-mappicker');
-    setTimeout(()=>{
-      if(!this._mapPicker){
-        this._mapPicker=L.map('map-picker').setView([41.9,12.5],5);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(this._mapPicker);
-        this._mapPicker.on('click',(e)=>{
-          this._pickedCoords=e.latlng;
-          if(this._pickerMarker)this._pickerMarker.remove();
-          this._pickerMarker=L.marker(e.latlng).addTo(this._mapPicker);
-          document.getElementById('map-picker-coords').innerHTML=
-            `<i class="fa-solid fa-crosshairs" style="color:var(--ocean)"></i> <span>${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}</span>`;
-        });
-      }
-      this._mapPicker.invalidateSize();
-    },300);
+    // Chiude il form waypoint e attiva la modalità selezione sulla mappa principale
+    App.closeModal('modal-waypoint');
+    if(!this._map)this.initMap();
+    this._pickMode=true;
+    document.getElementById('map-pick-banner').style.display='flex';
+    this._map.getContainer().style.cursor='crosshair';
+    // Scrolla fino alla mappa se necessario
+    document.getElementById('passage-map').scrollIntoView({behavior:'smooth',block:'center'});
   },
-  confirmMapPicker() {
-    if(!this._pickedCoords){App.toast('Seleziona un punto sulla mappa!','error');return;}
-    document.getElementById('wp-lat').value=this._pickedCoords.lat.toFixed(6);
-    document.getElementById('wp-lon').value=this._pickedCoords.lng.toFixed(6);
-    App.closeModal('modal-mappicker');
+  cancelPick() {
+    this._pickMode=false;
+    document.getElementById('map-pick-banner').style.display='none';
+    if(this._map)this._map.getContainer().style.cursor='';
+    App.openModal('modal-waypoint');
   },
   saveWaypoint() {
     const name=document.getElementById('wp-name').value.trim();
