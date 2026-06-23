@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a3a5c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>VoyageLog</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy: #1a3a5c;
+      --ocean: #2980b9;
+      --gold: #f39c12;
+      --white: #ffffff;
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --text: #2c3e50;
+      --text-light: #7f8c8d;
+      --success: #27ae60;
+      --danger: #e74c3c;
+      --border: #dce6f0;
+      --shadow: 0 2px 12px rgba(26,58,92,0.10);
+      --nav-h: 64px;
+      --header-h: 56px;
+    }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+
+    /* Header */
+    #app-header {
+      position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
+      background: var(--navy); color: var(--white);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    #app-header h1 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    #app-header h1 i { color: var(--gold); }
+    #header-actions button { background: none; border: none; color: var(--white); font-size: 18px; cursor: pointer; padding: 8px; opacity: 0.85; }
+    #header-actions button:hover { opacity: 1; }
+
+    /* Main */
+    #main { position: fixed; top: var(--header-h); left: 0; right: 0; bottom: var(--nav-h); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+    /* Sections */
+    .section { display: none; padding: 16px; min-height: 100%; }
+    .section.active { display: block; }
+
+    /* Bottom nav */
+    #bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; height: var(--nav-h);
+      background: var(--white); border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-around;
+      z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
+    }
+    .nav-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 3px; padding: 8px 4px; cursor: pointer;
+      background: none; border: none; color: var(--text-light);
+      font-size: 11px; font-family: inherit; transition: color 0.2s;
+    }
+    .nav-btn i { font-size: 20px; }
+    .nav-btn.active { color: var(--ocean); }
+    .nav-btn.active i { color: var(--navy); }
+
+    /* Cards */
+    .card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
+    .card-title { font-size: 16px; font-weight: 600; color: var(--navy); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .card-title i { color: var(--ocean); }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+    .btn-primary { background: var(--navy); color: var(--white); }
+    .btn-primary:hover { background: #253f6a; }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger { background: var(--danger); color: var(--white); }
+    .btn-success { background: var(--success); color: var(--white); }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+
+    /* Forms */
+    input[type="text"], input[type="date"], input[type="time"], input[type="number"], textarea, select {
+      width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: 14px; font-family: inherit;
+      background: var(--white); color: var(--text); outline: none; transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--ocean); }
+    textarea { resize: vertical; min-height: 80px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: var(--text-light); margin-bottom: 4px; }
+    .form-group { margin-bottom: 12px; }
+
+    /* Home */
+    .home-welcome {
+      background: linear-gradient(135deg, var(--navy), var(--ocean));
+      color: var(--white); border-radius: 16px; padding: 24px; margin-bottom: 16px;
+    }
+    .home-welcome h2 { font-size: 22px; margin-bottom: 4px; }
+    .home-welcome p { opacity: 0.8; font-size: 14px; }
+    .home-date { font-size: 13px; opacity: 0.7; margin-top: 8px; }
+    .home-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .stat-card { background: var(--card); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); text-align: center; }
+    .stat-card .stat-num { font-size: 28px; font-weight: 700; color: var(--navy); }
+    .stat-card .stat-lbl { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+    .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .quick-btn {
+      background: var(--card); border: 2px solid var(--border); border-radius: 12px;
+      padding: 16px 12px; text-align: center; cursor: pointer; transition: all 0.2s; font-family: inherit;
+    }
+    .quick-btn:hover, .quick-btn:active { border-color: var(--ocean); background: #f0f8ff; }
+    .quick-btn i { font-size: 24px; color: var(--ocean); display: block; margin-bottom: 6px; }
+    .quick-btn span { font-size: 13px; font-weight: 600; color: var(--text); }
+
+    /* Diary */
+    .diary-toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+    .diary-toolbar input[type="date"] { flex: 1; }
+    .diary-entry {
+      border-left: 4px solid var(--ocean); padding: 12px 14px;
+      background: var(--card); border-radius: 0 10px 10px 0;
+      margin-bottom: 10px; box-shadow: var(--shadow); cursor: pointer; transition: all 0.2s;
+    }
+    .diary-entry:hover { border-color: var(--gold); }
+    .diary-entry .entry-date { font-size: 12px; color: var(--text-light); margin-bottom: 4px; }
+    .diary-entry .entry-title { font-size: 15px; font-weight: 600; color: var(--navy); }
+    .diary-entry .entry-preview { font-size: 13px; color: var(--text-light); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .diary-entry .entry-meta { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+    .entry-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--bg); color: var(--text-light); display: inline-flex; align-items: center; gap: 4px; }
+
+    /* Notes */
+    .note-item { background: var(--card); border-radius: 10px; padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+    .note-item .note-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .note-item .note-date { font-size: 11px; color: var(--text-light); }
+    .note-item .note-geo { font-size: 11px; color: var(--ocean); display: flex; align-items: center; gap: 3px; }
+    .note-item .note-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+    .note-item .note-audio audio { width: 100%; height: 40px; margin-top: 8px; }
+    .note-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+    /* Recording button */
+    #rec-btn {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: var(--danger); color: var(--white); border: none; font-size: 26px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      margin: 16px auto; box-shadow: 0 4px 20px rgba(231,76,60,0.35); transition: all 0.2s;
+    }
+    #rec-btn.recording { animation: pulse 1s infinite; background: #c0392b; }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 4px 20px rgba(231,76,60,0.35), 0 0 0 0 rgba(231,76,60,0.4); }
+      50% { box-shadow: 0 4px 20px rgba(231,76,60,0.5), 0 0 0 12px rgba(231,76,60,0); }
+    }
+    #rec-status { text-align: center; font-size: 13px; color: var(--text-light); margin-bottom: 4px; }
+    #rec-timer { text-align: center; font-size: 26px; font-weight: 700; color: var(--danger); display: none; margin-bottom: 4px; }
+
+    /* Checklist */
+    .checklist-category { background: var(--card); border-radius: 12px; margin-bottom: 12px; box-shadow: var(--shadow); overflow: hidden; }
+    .checklist-cat-header {
+      background: var(--navy); color: var(--white); padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .checklist-cat-header .cat-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .checklist-cat-header .cat-count { font-size: 12px; opacity: 0.8; }
+    .checklist-items { padding: 8px 12px; }
+    .checklist-item { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--bg); }
+    .checklist-item:last-child { border-bottom: none; }
+    .checklist-item input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; accent-color: var(--ocean); flex-shrink: 0; }
+    .checklist-item .item-text { flex: 1; font-size: 14px; transition: all 0.2s; }
+    .checklist-item.checked .item-text { text-decoration: line-through; color: var(--text-light); }
+    .del-item { background: none; border: none; color: var(--danger); cursor: pointer; padding: 4px; font-size: 15px; opacity: 0.5; }
+    .del-item:hover { opacity: 1; }
+    .add-item-row { display: flex; gap: 8px; padding: 8px 4px; }
+    .add-item-row input { flex: 1; }
+    .progress-bar { height: 4px; background: var(--bg); }
+    .progress-fill { height: 100%; background: var(--success); transition: width 0.3s; }
+
+    /* Passage Plan */
+    .passage-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .passage-stat { background: var(--card); border-radius: 10px; padding: 12px; text-align: center; box-shadow: var(--shadow); }
+    .passage-stat .p-val { font-size: 17px; font-weight: 700; color: var(--navy); }
+    .passage-stat .p-lbl { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+    .waypoint-item { background: var(--card); border-radius: 10px; padding: 14px 14px 10px; margin-bottom: 10px; box-shadow: var(--shadow); position: relative; }
+    .waypoint-num {
+      position: absolute; top: -8px; left: 12px;
+      background: var(--navy); color: var(--white); width: 22px; height: 22px; border-radius: 50%;
+      font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+    .waypoint-name { font-weight: 600; font-size: 15px; margin-bottom: 4px; padding-top: 6px; }
+    .waypoint-coords { font-size: 13px; color: var(--ocean); font-family: monospace; margin-bottom: 6px; }
+    .waypoint-leg { font-size: 12px; color: var(--text-light); display: flex; gap: 14px; flex-wrap: wrap; }
+    .waypoint-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .map-container { height: 220px; border-radius: 10px; overflow: hidden; margin-bottom: 14px; border: 2px solid var(--border); }
+    .bearing-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--navy); color: white; padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .bearing-pill i { color: var(--gold); }
+
+    /* Modals */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: flex-end; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--white); border-radius: 20px 20px 0 0; width: 100%; max-width: 600px;
+      max-height: 90vh; overflow-y: auto; padding: 24px 20px 40px; animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--navy); }
+    .modal-close { background: var(--bg); border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+
+    /* FAB */
+    .fab {
+      position: fixed; bottom: calc(var(--nav-h) + 16px); right: 16px;
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--gold); color: var(--white); font-size: 22px; border: none; cursor: pointer;
+      box-shadow: 0 4px 16px rgba(243,156,18,0.4); display: none; align-items: center; justify-content: center; z-index: 50;
+    }
+
+    /* Toast */
+    #toast-container { position: fixed; bottom: calc(var(--nav-h) + 12px); left: 50%; transform: translateX(-50%); z-index: 300; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+    .toast { background: #2c3e50; color: var(--white); padding: 10px 20px; border-radius: 24px; font-size: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); animation: toastIn 0.3s ease; white-space: nowrap; }
+    @keyframes toastIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+
+    /* Misc */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--text-light); }
+    .empty-state i { font-size: 48px; margin-bottom: 12px; opacity: 0.3; display: block; }
+    .empty-state p { font-size: 14px; }
+    .section-title { font-size: 12px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+    .settings-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 4px; border-bottom: 1px solid var(--bg); cursor: pointer; }
+    .settings-item:last-child { border-bottom: none; }
+    .settings-item .setting-label { font-size: 14px; font-weight: 500; }
+    .settings-item .setting-desc { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+    .mood-btn { font-size: 20px; padding: 6px 10px; }
+    .cat-icon-btn { font-size: 20px; padding: 8px; width: 44px; height: 44px; justify-content: center; border-radius: 8px; }
+    .cat-icon-btn.selected { background: var(--ocean); }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header id="app-header">
+  <h1><i class="fa-solid fa-anchor"></i> VoyageLog</h1>
+  <div id="header-actions">
+    <button onclick="App.showSettings()" title="Impostazioni"><i class="fa-solid fa-gear"></i></button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main id="main">
+
+  <!-- HOME -->
+  <section id="section-home" class="section active">
+    <div class="home-welcome">
+      <h2>Benvenuto, Navigatore!</h2>
+      <p>Tieni traccia della tua avventura in mare</p>
+      <div class="home-date" id="home-date"></div>
+    </div>
+    <div class="home-stats">
+      <div class="stat-card"><div class="stat-num" id="stat-entries">0</div><div class="stat-lbl">Voci diario</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-notes">0</div><div class="stat-lbl">Note</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-checklist">0%</div><div class="stat-lbl">Checklist</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-wp">0</div><div class="stat-lbl">Waypoint</div></div>
+    </div>
+    <p class="section-title">Azioni rapide</p>
+    <div class="quick-actions">
+      <button class="quick-btn" onclick="App.navigate('diario');DiarioModule.openNewEntry()">
+        <i class="fa-solid fa-pen-to-square"></i><span>Nuova voce diario</span>
+      </button>
+      <button class="quick-btn" onclick="App.navigate('note')">
+        <i class="fa-solid fa-microphone"></i><span>Nota vocale</span>
+      </button>
+      <button class="quick-btn" onclick="App.navigate('checklist')">
+        <i class="fa-solid fa-list-check"></i><span>Checklist</span>
+      </button>
+      <button class="quick-btn" onclick="App.navigate('rotta')">
+        <i class="fa-solid fa-compass"></i><span>Passage plan</span>
+      </button>
+    </div>
+    <p class="section-title" id="last-entry-label" style="display:none">Ultima voce</p>
+    <div id="last-entry-preview"></div>
+    <div class="card" id="drive-status-card">
+      <div class="card-title"><i class="fa-brands fa-google-drive"></i> Google Drive</div>
+      <div id="drive-status-msg" style="font-size:13px;color:var(--text-light)">Non connesso — vai in <strong>Impostazioni</strong> per sincronizzare su Drive.</div>
+      <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" onclick="App.showSettings()"><i class="fa-solid fa-gear"></i> Impostazioni</button></div>
+    </div>
+  </section>
+
+  <!-- DIARIO -->
+  <section id="section-diario" class="section">
+    <div class="diary-toolbar">
+      <input type="date" id="diary-filter-date" onchange="DiarioModule.filterByDate(this.value)">
+      <button class="btn btn-secondary btn-sm" onclick="DiarioModule.clearFilter()">Tutte</button>
+    </div>
+    <div id="diary-list"></div>
+    <div id="diary-empty" class="empty-state" style="display:none">
+      <i class="fa-solid fa-book-open"></i>
+      <p>Nessuna voce nel diario.<br>Premi <strong>+</strong> per iniziare!</p>
+    </div>
+    <button class="fab" id="fab-diary" onclick="DiarioModule.openNewEntry()"><i class="fa-solid fa-plus"></i></button>
+  </section>
+
+  <!-- NOTE -->
+  <section id="section-note" class="section">
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-microphone"></i> Nota vocale</div>
+      <div id="rec-timer">00:00</div>
+      <div id="rec-status">Premi per registrare</div>
+      <button id="rec-btn" onclick="NoteModule.toggleRecording()"><i class="fa-solid fa-microphone"></i></button>
+      <div id="geo-status" style="font-size:12px;text-align:center;color:var(--text-light);margin-top:-8px;margin-bottom:12px"></div>
+      <div class="form-group">
+        <label>Testo aggiuntivo (opzionale)</label>
+        <textarea id="rec-note-text" placeholder="Aggiungi una descrizione..."></textarea>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-note-sticky"></i> Nota testuale</div>
+      <div class="form-group">
+        <textarea id="text-note-input" placeholder="Scrivi la tua nota..."></textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="NoteModule.getGeoForTextNote()"><i class="fa-solid fa-location-dot"></i> Posizione GPS</button>
+        <button class="btn btn-primary btn-sm" onclick="NoteModule.saveTextNote()"><i class="fa-solid fa-floppy-disk"></i> Salva</button>
+      </div>
+      <div id="text-note-geo" style="margin-top:8px;font-size:12px;color:var(--ocean)"></div>
+    </div>
+    <p class="section-title">Note salvate (<span id="notes-count">0</span>)</p>
+    <div id="notes-list"></div>
+    <div id="notes-empty" class="empty-state" style="display:none">
+      <i class="fa-solid fa-note-sticky"></i><p>Nessuna nota ancora.</p>
+    </div>
+  </section>
+
+  <!-- CHECKLIST -->
+  <section id="section-checklist" class="section">
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn btn-primary btn-sm" onclick="ChecklistModule.addCategory()"><i class="fa-solid fa-folder-plus"></i> Nuova categoria</button>
+      <button class="btn btn-secondary btn-sm" onclick="ChecklistModule.resetAll()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+    </div>
+    <div id="checklist-container"></div>
+    <div id="checklist-empty" class="empty-state" style="display:none">
+      <i class="fa-solid fa-list-check"></i><p>Nessuna lista. Crea una categoria!</p>
+    </div>
+  </section>
+
+  <!-- PASSAGE PLAN -->
+  <section id="section-rotta" class="section">
+    <div class="passage-info">
+      <div class="passage-stat"><div class="p-val" id="pp-total-dist">0 nm</div><div class="p-lbl">Distanza tot.</div></div>
+      <div class="passage-stat"><div class="p-val" id="pp-waypoints">0</div><div class="p-lbl">Waypoint</div></div>
+      <div class="passage-stat"><div class="p-val" id="pp-eta">--</div><div class="p-lbl">ETA (<span id="pp-speed-lbl">6kn</span>)</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-gauge"></i> Velocità media</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input type="number" id="pp-speed" value="6" min="1" max="50" style="width:80px" onchange="PassageModule.updateStats()">
+        <span style="font-size:14px;color:var(--text-light)">nodi</span>
+      </div>
+    </div>
+    <div class="map-container" id="passage-map"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <p class="section-title" style="margin:0">Waypoint rotta</p>
+      <button class="btn btn-primary btn-sm" onclick="PassageModule.openAddWaypoint()"><i class="fa-solid fa-map-pin"></i> Aggiungi</button>
+    </div>
+    <div id="waypoints-list"></div>
+    <div id="waypoints-empty" class="empty-state" style="display:none">
+      <i class="fa-solid fa-map"></i><p>Nessun waypoint.<br>Inizia aggiungendo la partenza!</p>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="card-title"><i class="fa-solid fa-file-export"></i> Esporta rotta</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="PassageModule.exportGPX()"><i class="fa-solid fa-download"></i> GPX</button>
+        <button class="btn btn-secondary btn-sm" onclick="PassageModule.exportText()"><i class="fa-solid fa-file-lines"></i> Testo</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- IMPOSTAZIONI -->
+  <section id="section-settings" class="section">
+    <div class="card">
+      <div class="card-title"><i class="fa-brands fa-google-drive"></i> Sincronizzazione Google Drive</div>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;line-height:1.5">Per sincronizzare i dati su Google Drive hai bisogno di un <strong>Client ID OAuth 2.0</strong>. Segui le istruzioni nel file <strong>ISTRUZIONI.md</strong> per ottenerlo gratuitamente.</p>
+      <div class="form-group">
+        <label>Client ID OAuth 2.0</label>
+        <input type="text" id="s-client-id" placeholder="xxxx.apps.googleusercontent.com">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="DriveModule.connect()"><i class="fa-brands fa-google"></i> Connetti</button>
+        <button class="btn btn-secondary btn-sm" onclick="DriveModule.disconnect()">Disconnetti</button>
+        <button class="btn btn-success btn-sm" onclick="DriveModule.syncNow()" id="btn-sync-now" style="display:none"><i class="fa-solid fa-rotate"></i> Sincronizza ora</button>
+      </div>
+      <div id="drive-user-info" style="margin-top:10px;font-size:13px;color:var(--success)"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-database"></i> Gestione dati</div>
+      <div class="settings-item" onclick="App.exportAllData()">
+        <div><div class="setting-label">Esporta backup (JSON)</div><div class="setting-desc">Scarica tutti i dati in un file</div></div>
+        <i class="fa-solid fa-download" style="color:var(--text-light)"></i>
+      </div>
+      <div class="settings-item" onclick="App.importData()">
+        <div><div class="setting-label">Importa backup</div><div class="setting-desc">Carica un file JSON salvato in precedenza</div></div>
+        <i class="fa-solid fa-upload" style="color:var(--text-light)"></i>
+      </div>
+      <div class="settings-item" onclick="App.clearAllData()">
+        <div><div class="setting-label" style="color:var(--danger)">Cancella tutti i dati</div><div class="setting-desc">Azione irreversibile!</div></div>
+        <i class="fa-solid fa-trash" style="color:var(--danger)"></i>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-circle-info"></i> Informazioni</div>
+      <p style="font-size:13px;color:var(--text-light);line-height:1.7">
+        <strong>VoyageLog v1.0</strong><br>
+        App per il diario di viaggio e navigazione.<br>
+        Dati salvati nel browser (localStorage).<br>
+        Usa Google Drive per sincronizzare tra dispositivi.
+      </p>
+    </div>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="App.handleImport(event)">
+  </section>
+
+</main>
+
+<!-- BOTTOM NAV -->
+<nav id="bottom-nav">
+  <button class="nav-btn active" data-section="home" onclick="App.navigate('home')"><i class="fa-solid fa-house"></i><span>Home</span></button>
+  <button class="nav-btn" data-section="diario" onclick="App.navigate('diario')"><i class="fa-solid fa-book"></i><span>Diario</span></button>
+  <button class="nav-btn" data-section="note" onclick="App.navigate('note')"><i class="fa-solid fa-note-sticky"></i><span>Note</span></button>
+  <button class="nav-btn" data-section="checklist" onclick="App.navigate('checklist')"><i class="fa-solid fa-list-check"></i><span>Liste</span></button>
+  <button class="nav-btn" data-section="rotta" onclick="App.navigate('rotta')"><i class="fa-solid fa-compass"></i><span>Rotta</span></button>
+</nav>
+
+<!-- MODALI -->
+
+<!-- Diario: nuova/modifica voce -->
+<div class="modal-overlay" id="modal-diary">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-diary-title">Nuova voce</span>
+      <button class="modal-close" onclick="App.closeModal('modal-diary')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-group"><label>Data</label><input type="date" id="diary-entry-date"></div>
+    <div class="form-group"><label>Titolo</label><input type="text" id="diary-entry-title" placeholder="Es: Arrivo a Portofino"></div>
+    <div class="form-group"><label>Resoconto</label><textarea id="diary-entry-text" style="min-height:120px" placeholder="Descrivi la tua giornata..."></textarea></div>
+    <div class="form-group"><label>Luogo / Porto</label><input type="text" id="diary-entry-location" placeholder="Es: Marina di Portofino"></div>
+    <div class="form-group">
+      <label>Meteo</label>
+      <select id="diary-entry-weather">
+        <option value="">-- Seleziona --</option>
+        <option>☀️ Sole</option><option>⛅ Parzialmente nuvoloso</option>
+        <option>☁️ Nuvoloso</option><option>🌧️ Pioggia</option>
+        <option>⛈️ Temporale</option><option>🌬️ Vento forte</option><option>🌫️ Nebbia</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Vento</label><input type="text" id="diary-entry-wind" placeholder="Es: NW 15 nodi"></div>
+    <div class="form-group"><label>Distanza percorsa (nm)</label><input type="number" id="diary-entry-dist" placeholder="0" min="0" step="0.1"></div>
+    <div class="form-group">
+      <label>Umore</label>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-secondary mood-btn" data-mood="😊" onclick="DiarioModule.setMood('😊',this)">😊</button>
+        <button class="btn btn-secondary mood-btn" data-mood="😐" onclick="DiarioModule.setMood('😐',this)">😐</button>
+        <button class="btn btn-secondary mood-btn" data-mood="😢" onclick="DiarioModule.setMood('😢',this)">😢</button>
+        <button class="btn btn-secondary mood-btn" data-mood="😤" onclick="DiarioModule.setMood('😤',this)">😤</button>
+        <button class="btn btn-secondary mood-btn" data-mood="🤩" onclick="DiarioModule.setMood('🤩',this)">🤩</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="DiarioModule.saveEntry()"><i class="fa-solid fa-floppy-disk"></i> Salva</button>
+      <button id="diary-delete-btn" class="btn btn-danger" style="display:none" onclick="DiarioModule.deleteEntry()"><i class="fa-solid fa-trash"></i></button>
+    </div>
+  </div>
+</div>
+
+<!-- Diario: visualizza voce -->
+<div class="modal-overlay" id="modal-diary-view">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="view-modal-title"></span>
+      <button class="modal-close" onclick="App.closeModal('modal-diary-view')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="diary-view-content"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="DiarioModule.editFromView()"><i class="fa-solid fa-pen"></i> Modifica</button>
+      <button class="btn btn-secondary btn-sm" onclick="App.closeModal('modal-diary-view')">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Waypoint -->
+<div class="modal-overlay" id="modal-waypoint">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Aggiungi waypoint</span>
+      <button class="modal-close" onclick="App.closeModal('modal-waypoint')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-group"><label>Nome waypoint</label><input type="text" id="wp-name" placeholder="Es: Porto di Genova, Capo Mele..."></div>
+    <div class="form-group">
+      <label>Coordinate geografiche</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div style="flex:1"><label>Latitudine</label><input type="text" id="wp-lat" placeholder="44.1234"></div>
+        <div style="flex:1"><label>Longitudine</label><input type="text" id="wp-lon" placeholder="8.5678"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="PassageModule.getGPSForWaypoint()"><i class="fa-solid fa-location-crosshairs"></i> GPS attuale</button>
+        <button class="btn btn-secondary btn-sm" onclick="PassageModule.openMapPicker()"><i class="fa-solid fa-map"></i> Scegli da mappa</button>
+      </div>
+    </div>
+    <div class="form-group"><label>Note (opzionale)</label><input type="text" id="wp-notes" placeholder="Note sul waypoint..."></div>
+    <div class="form-group"><label>Ora arrivo previsto</label><input type="time" id="wp-eta-time"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="PassageModule.saveWaypoint()"><i class="fa-solid fa-map-pin"></i> Aggiungi waypoint</button>
+  </div>
+</div>
+
+<!-- Map picker -->
+<div class="modal-overlay" id="modal-mappicker">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Scegli posizione</span>
+      <button class="modal-close" onclick="App.closeModal('modal-mappicker')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:8px">Tocca la mappa per selezionare le coordinate del waypoint</p>
+    <div id="map-picker" style="height:280px;border-radius:10px;overflow:hidden;border:2px solid var(--border)"></div>
+    <div id="map-picker-coords" style="background:var(--bg);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:13px;color:var(--navy);margin-top:10px;display:flex;align-items:center;gap:8px">
+      <i class="fa-solid fa-crosshairs" style="color:var(--ocean)"></i>
+      <span>Nessuna posizione selezionata</span>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="PassageModule.confirmMapPicker()"><i class="fa-solid fa-check"></i> Usa questa posizione</button>
+  </div>
+</div>
+
+<!-- Nuova categoria checklist -->
+<div class="modal-overlay" id="modal-category">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Nuova categoria</span>
+      <button class="modal-close" onclick="App.closeModal('modal-category')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-group"><label>Nome categoria</label><input type="text" id="cat-name" placeholder="Es: Cibo, Attrezzatura, Medicine..."></div>
+    <div class="form-group">
+      <label>Icona</label>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:6px">
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('🍕',this)">🍕</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('🥩',this)">🥩</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('🎒',this)">🎒</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('💊',this)">💊</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('⚓',this)">⚓</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('🔧',this)">🔧</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('👕',this)">👕</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('📷',this)">📷</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('🗺️',this)">🗺️</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('🔦',this)">🔦</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('🛟',this)">🛟</button>
+        <button class="btn btn-secondary cat-icon-btn" onclick="ChecklistModule.selectIcon('📻',this)">📻</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="ChecklistModule.saveCategory()"><i class="fa-solid fa-check"></i> Crea categoria</button>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ─────────────────────────────────────────
+//  DATABASE (localStorage)
+// ─────────────────────────────────────────
+const DB = {
+  _data: null,
+  load() {
+    const raw = localStorage.getItem('voyagelog_data');
+    this._data = raw ? JSON.parse(raw) : this._default();
+    return this._data;
+  },
+  _default() {
+    return {
+      diary: [],
+      notes: [],
+      checklist: [
+        { id:'cat1', name:'Viveri', icon:'🍕', items:[
+          {id:'i1',text:'Acqua potabile',checked:false},
+          {id:'i2',text:'Frutta e verdura',checked:false},
+          {id:'i3',text:'Pane / crackers',checked:false},
+          {id:'i4',text:'Scatolame',checked:false}
+        ]},
+        { id:'cat2', name:'Attrezzatura', icon:'⚓', items:[
+          {id:'i5',text:'Giubbotti salvagente',checked:false},
+          {id:'i6',text:'Fanali di navigazione',checked:false},
+          {id:'i7',text:'Binocolo',checked:false},
+          {id:'i8',text:'Ancora e catena',checked:false},
+          {id:'i9',text:'Cime di ormeggio',checked:false}
+        ]},
+        { id:'cat3', name:'Medicine', icon:'💊', items:[
+          {id:'i10',text:'Antidolorifici',checked:false},
+          {id:'i11',text:'Cerotti e garze',checked:false},
+          {id:'i12',text:'Antinausea',checked:false},
+          {id:'i13',text:'Crema solare',checked:false}
+        ]}
+      ],
+      waypoints: [],
+      settings: { ppSpeed:6, driveClientId:'', driveConnected:false }
+    };
+  },
+  save() { localStorage.setItem('voyagelog_data', JSON.stringify(this._data)); },
+  get(k) { return this._data[k]; },
+  set(k,v) { this._data[k]=v; this.save(); },
+  uid() { return Date.now().toString(36)+Math.random().toString(36).substr(2,5); }
+};
+
+// ─────────────────────────────────────────
+//  APP
+// ─────────────────────────────────────────
+const App = {
+  currentSection:'home',
+  init() {
+    DB.load();
+    document.getElementById('home-date').textContent = new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const s = DB.get('settings');
+    if(s.driveClientId) document.getElementById('s-client-id').value = s.driveClientId;
+    DiarioModule.init();
+    NoteModule.init();
+    ChecklistModule.init();
+    PassageModule.init();
+    DriveModule.init();
+    this.updateStats();
+  },
+  navigate(section) {
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    const el = document.getElementById('section-'+section);
+    if(el) el.classList.add('active');
+    const btn = document.querySelector(`.nav-btn[data-section="${section}"]`);
+    if(btn) btn.classList.add('active');
+    this.currentSection = section;
+    const fab = document.getElementById('fab-diary');
+    if(fab) fab.style.display = section==='diario'?'flex':'none';
+    if(section==='diario') DiarioModule.render();
+    if(section==='note') NoteModule.render();
+    if(section==='checklist') ChecklistModule.render();
+    if(section==='rotta') PassageModule.render();
+    if(section==='home') this.updateStats();
+  },
+  showSettings() {
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('section-settings').classList.add('active');
+    document.getElementById('fab-diary').style.display='none';
+  },
+  closeModal(id) { document.getElementById(id).classList.remove('open'); },
+  openModal(id) { document.getElementById(id).classList.add('open'); },
+  toast(msg, type='') {
+    const t=document.createElement('div');
+    t.className='toast '+(type||'');
+    t.textContent=msg;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(()=>t.remove(),3000);
+  },
+  updateStats() {
+    const diary=DB.get('diary'), notes=DB.get('notes'), checklist=DB.get('checklist'), wp=DB.get('waypoints');
+    document.getElementById('stat-entries').textContent=diary.length;
+    document.getElementById('stat-notes').textContent=notes.length;
+    document.getElementById('stat-wp').textContent=wp.length;
+    let tot=0,chk=0;
+    checklist.forEach(c=>c.items.forEach(i=>{tot++;if(i.checked)chk++;}));
+    document.getElementById('stat-checklist').textContent=(tot>0?Math.round(chk/tot*100):0)+'%';
+    if(diary.length>0){
+      const last=[...diary].sort((a,b)=>b.date.localeCompare(a.date))[0];
+      document.getElementById('last-entry-label').style.display='block';
+      document.getElementById('last-entry-preview').innerHTML=`
+        <div class="diary-entry" onclick="DiarioModule.viewEntry('${last.id}')">
+          <div class="entry-date">${DiarioModule.formatDate(last.date)}</div>
+          <div class="entry-title">${last.mood||''} ${last.title||'Senza titolo'}</div>
+          <div class="entry-preview">${last.text||''}</div>
+        </div>`;
+    } else {
+      document.getElementById('last-entry-label').style.display='none';
+      document.getElementById('last-entry-preview').innerHTML='';
+    }
+  },
+  exportAllData() {
+    const blob=new Blob([JSON.stringify(DB._data,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='voyagelog_backup_'+new Date().toISOString().slice(0,10)+'.json';
+    a.click();
+    this.toast('Dati esportati!','success');
+  },
+  importData() { document.getElementById('import-file').click(); },
+  handleImport(e) {
+    const file=e.target.files[0]; if(!file)return;
+    const r=new FileReader();
+    r.onload=ev=>{
+      try {
+        const d=JSON.parse(ev.target.result);
+        if(!d.diary||!d.notes) throw 0;
+        DB._data=d; DB.save();
+        this.toast('Dati importati!','success');
+        setTimeout(()=>location.reload(),1000);
+      } catch { this.toast('File non valido!','error'); }
+    };
+    r.readAsText(file);
+  },
+  clearAllData() {
+    if(confirm('Cancellare TUTTI i dati? Questa azione è irreversibile!')) {
+      localStorage.removeItem('voyagelog_data');
+      location.reload();
+    }
+  }
+};
+
+// ─────────────────────────────────────────
+//  DIARIO
+// ─────────────────────────────────────────
+const DiarioModule = {
+  _editingId:null, _mood:'', _filterDate:'', _viewingId:null,
+  init() {},
+  render() {
+    const diary=DB.get('diary');
+    let entries=[...diary].sort((a,b)=>b.date.localeCompare(a.date));
+    if(this._filterDate) entries=entries.filter(e=>e.date===this._filterDate);
+    const list=document.getElementById('diary-list');
+    const empty=document.getElementById('diary-empty');
+    if(entries.length===0){list.innerHTML='';empty.style.display='block';return;}
+    empty.style.display='none';
+    list.innerHTML=entries.map(e=>`
+      <div class="diary-entry" onclick="DiarioModule.viewEntry('${e.id}')">
+        <div class="entry-date">${this.formatDate(e.date)}</div>
+        <div class="entry-title">${e.mood||''} ${e.title||'Senza titolo'}</div>
+        <div class="entry-preview">${(e.text||'').slice(0,80)}${(e.text||'').length>80?'…':''}</div>
+        <div class="entry-meta">
+          ${e.location?`<span class="entry-badge"><i class="fa-solid fa-location-dot"></i> ${e.location}</span>`:''}
+          ${e.weather?`<span class="entry-badge">${e.weather}</span>`:''}
+          ${e.dist?`<span class="entry-badge"><i class="fa-solid fa-route"></i> ${e.dist} nm</span>`:''}
+        </div>
+      </div>`).join('');
+  },
+  formatDate(d) {
+    if(!d) return '';
+    return new Date(d+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  },
+  openNewEntry() {
+    this._editingId=null; this._mood='';
+    document.getElementById('modal-diary-title').textContent='Nuova voce';
+    document.getElementById('diary-entry-date').value=new Date().toISOString().slice(0,10);
+    ['diary-entry-title','diary-entry-text','diary-entry-location','diary-entry-wind','diary-entry-dist'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('diary-entry-weather').value='';
+    document.getElementById('diary-delete-btn').style.display='none';
+    document.querySelectorAll('.mood-btn').forEach(b=>{b.classList.remove('btn-primary');b.classList.add('btn-secondary');});
+    App.openModal('modal-diary');
+  },
+  editEntry(id) {
+    const e=DB.get('diary').find(x=>x.id===id); if(!e)return;
+    this._editingId=id; this._mood=e.mood||'';
+    document.getElementById('modal-diary-title').textContent='Modifica voce';
+    document.getElementById('diary-entry-date').value=e.date;
+    document.getElementById('diary-entry-title').value=e.title||'';
+    document.getElementById('diary-entry-text').value=e.text||'';
+    document.getElementById('diary-entry-location').value=e.location||'';
+    document.getElementById('diary-entry-weather').value=e.weather||'';
+    document.getElementById('diary-entry-wind').value=e.wind||'';
+    document.getElementById('diary-entry-dist').value=e.dist||'';
+    document.getElementById('diary-delete-btn').style.display='inline-flex';
+    document.querySelectorAll('.mood-btn').forEach(b=>{
+      b.classList.toggle('btn-primary',b.dataset.mood===this._mood);
+      b.classList.toggle('btn-secondary',b.dataset.mood!==this._mood);
+    });
+    App.closeModal('modal-diary-view');
+    App.openModal('modal-diary');
+  },
+  setMood(mood,btn) {
+    this._mood=mood;
+    document.querySelectorAll('.mood-btn').forEach(b=>{b.classList.remove('btn-primary');b.classList.add('btn-secondary');});
+    btn.classList.add('btn-primary'); btn.classList.remove('btn-secondary');
+  },
+  saveEntry() {
+    const date=document.getElementById('diary-entry-date').value;
+    if(!date){App.toast('Inserisci la data!','error');return;}
+    const entry={
+      id:this._editingId||DB.uid(), date,
+      title:document.getElementById('diary-entry-title').value.trim(),
+      text:document.getElementById('diary-entry-text').value.trim(),
+      location:document.getElementById('diary-entry-location').value.trim(),
+      weather:document.getElementById('diary-entry-weather').value,
+      wind:document.getElementById('diary-entry-wind').value.trim(),
+      dist:document.getElementById('diary-entry-dist').value,
+      mood:this._mood, updatedAt:new Date().toISOString()
+    };
+    const diary=DB.get('diary');
+    if(this._editingId){const idx=diary.findIndex(e=>e.id===this._editingId);if(idx>=0)diary[idx]=entry;}
+    else diary.push(entry);
+    DB.set('diary',diary);
+    App.closeModal('modal-diary');
+    App.toast('Voce salvata!','success');
+    this.render(); App.updateStats(); DriveModule.syncIfConnected();
+  },
+  deleteEntry() {
+    if(!this._editingId||!confirm('Eliminare questa voce?'))return;
+    DB.set('diary',DB.get('diary').filter(e=>e.id!==this._editingId));
+    App.closeModal('modal-diary');
+    App.toast('Voce eliminata');
+    this.render(); App.updateStats();
+  },
+  viewEntry(id) {
+    const e=DB.get('diary').find(x=>x.id===id); if(!e)return;
+    this._viewingId=id;
+    document.getElementById('view-modal-title').textContent=e.title||'Senza titolo';
+    document.getElementById('diary-view-content').innerHTML=`
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">${this.formatDate(e.date)}</p>
+      ${e.mood?`<p style="font-size:32px;margin-bottom:12px">${e.mood}</p>`:''}
+      <p style="font-size:14px;line-height:1.8;white-space:pre-wrap;margin-bottom:12px">${e.text||'<em style="color:var(--text-light)">Nessun testo</em>'}</p>
+      <hr class="divider">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px">
+        ${e.location?`<div><i class="fa-solid fa-location-dot" style="color:var(--ocean)"></i> <strong>Luogo</strong><br>${e.location}</div>`:''}
+        ${e.weather?`<div><strong>Meteo</strong><br>${e.weather}</div>`:''}
+        ${e.wind?`<div><i class="fa-solid fa-wind" style="color:var(--ocean)"></i> <strong>Vento</strong><br>${e.wind}</div>`:''}
+        ${e.dist?`<div><i class="fa-solid fa-route" style="color:var(--ocean)"></i> <strong>Distanza</strong><br>${e.dist} nm</div>`:''}
+      </div>`;
+    App.openModal('modal-diary-view');
+  },
+  editFromView() { this.editEntry(this._viewingId); },
+  filterByDate(date) { this._filterDate=date; this.render(); },
+  clearFilter() { this._filterDate=''; document.getElementById('diary-filter-date').value=''; this.render(); }
+};
+
+// ─────────────────────────────────────────
+//  NOTE
+// ─────────────────────────────────────────
+const NoteModule = {
+  _recorder:null, _chunks:[], _recording:false, _timer:null, _seconds:0,
+  _currentGeo:null, _textNoteGeo:null,
+  init() {},
+  render() {
+    const notes=DB.get('notes');
+    document.getElementById('notes-count').textContent=notes.length;
+    const list=document.getElementById('notes-list');
+    const empty=document.getElementById('notes-empty');
+    if(notes.length===0){list.innerHTML='';empty.style.display='block';return;}
+    empty.style.display='none';
+    const sorted=[...notes].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+    list.innerHTML=sorted.map(n=>`
+      <div class="note-item">
+        <div class="note-header">
+          <div class="note-date">${new Date(n.createdAt).toLocaleString('it-IT')}</div>
+          ${n.geo?`<div class="note-geo"><i class="fa-solid fa-location-dot"></i> ${n.geo.lat.toFixed(4)}, ${n.geo.lon.toFixed(4)}</div>`:''}
+        </div>
+        ${n.text?`<div class="note-text">${n.text}</div>`:''}
+        ${n.audioUrl?`<div class="note-audio"><audio controls src="${n.audioUrl}"></audio></div>`:''}
+        <div class="note-actions">
+          <button class="btn btn-danger btn-sm" onclick="NoteModule.deleteNote('${n.id}')"><i class="fa-solid fa-trash"></i></button>
+          ${n.geo?`<a class="btn btn-secondary btn-sm" href="https://www.openstreetmap.org/?mlat=${n.geo.lat}&mlon=${n.geo.lon}&zoom=15" target="_blank"><i class="fa-solid fa-map"></i> Mappa</a>`:''}
+        </div>
+      </div>`).join('');
+  },
+  async toggleRecording() {
+    if(!this._recording) await this.startRecording();
+    else this.stopRecording();
+  },
+  async startRecording() {
+    try {
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      this._chunks=[]; this._recorder=new MediaRecorder(stream);
+      this._recorder.ondataavailable=e=>{if(e.data.size>0)this._chunks.push(e.data);};
+      this._recorder.onstop=()=>this.processRecording();
+      this._recorder.start(); this._recording=true;
+      const btn=document.getElementById('rec-btn');
+      btn.classList.add('recording'); btn.innerHTML='<i class="fa-solid fa-stop"></i>';
+      document.getElementById('rec-status').textContent='Registrazione in corso...';
+      document.getElementById('rec-timer').style.display='block';
+      this._seconds=0;
+      this._timer=setInterval(()=>{
+        this._seconds++;
+        const m=Math.floor(this._seconds/60).toString().padStart(2,'0');
+        const s=(this._seconds%60).toString().padStart(2,'0');
+        document.getElementById('rec-timer').textContent=m+':'+s;
+      },1000);
+      this.getGeoSilent();
+    } catch(err) {
+      App.toast('Microfono non disponibile: '+err.message,'error');
+    }
+  },
+  stopRecording() {
+    if(this._recorder&&this._recording){
+      this._recorder.stop();
+      this._recorder.stream.getTracks().forEach(t=>t.stop());
+      clearInterval(this._timer); this._recording=false;
+      const btn=document.getElementById('rec-btn');
+      btn.classList.remove('recording'); btn.innerHTML='<i class="fa-solid fa-microphone"></i>';
+      document.getElementById('rec-status').textContent='Elaborazione...';
+      document.getElementById('rec-timer').style.display='none';
+    }
+  },
+  processRecording() {
+    const blob=new Blob(this._chunks,{type:'audio/webm'});
+    const r=new FileReader();
+    r.onloadend=()=>{
+      this.saveNote({
+        id:DB.uid(), type:'audio', audioUrl:r.result,
+        text:document.getElementById('rec-note-text').value.trim(),
+        geo:this._currentGeo, createdAt:new Date().toISOString()
+      });
+      document.getElementById('rec-note-text').value='';
+      this._currentGeo=null; document.getElementById('geo-status').textContent='';
+    };
+    r.readAsDataURL(blob);
+    document.getElementById('rec-status').textContent='Premi per registrare';
+  },
+  saveNote(note) {
+    const notes=DB.get('notes'); notes.push(note); DB.set('notes',notes);
+    App.toast('Nota salvata!','success');
+    this.render(); App.updateStats(); DriveModule.syncIfConnected();
+  },
+  saveTextNote() {
+    const text=document.getElementById('text-note-input').value.trim();
+    if(!text){App.toast('Scrivi qualcosa!','error');return;}
+    this.saveNote({id:DB.uid(),type:'text',text,geo:this._textNoteGeo,createdAt:new Date().toISOString()});
+    document.getElementById('text-note-input').value='';
+    this._textNoteGeo=null; document.getElementById('text-note-geo').textContent='';
+  },
+  getGeoForTextNote() {
+    if(!navigator.geolocation){App.toast('GPS non disponibile','error');return;}
+    App.toast('Rilevamento posizione...');
+    navigator.geolocation.getCurrentPosition(pos=>{
+      this._textNoteGeo={lat:pos.coords.latitude,lon:pos.coords.longitude,acc:pos.coords.accuracy};
+      document.getElementById('text-note-geo').innerHTML=
+        `<i class="fa-solid fa-location-dot"></i> ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)} (±${Math.round(pos.coords.accuracy)}m)`;
+      App.toast('Posizione rilevata!','success');
+    },()=>App.toast('Impossibile ottenere la posizione','error'));
+  },
+  getGeoSilent() {
+    if(!navigator.geolocation)return;
+    navigator.geolocation.getCurrentPosition(pos=>{
+      this._currentGeo={lat:pos.coords.latitude,lon:pos.coords.longitude,acc:pos.coords.accuracy};
+      document.getElementById('geo-status').innerHTML=`<i class="fa-solid fa-location-dot"></i> Posizione rilevata`;
+    });
+  },
+  deleteNote(id) {
+    if(!confirm('Eliminare questa nota?'))return;
+    DB.set('notes',DB.get('notes').filter(n=>n.id!==id));
+    App.toast('Nota eliminata'); this.render(); App.updateStats();
+  }
+};
+
+// ─────────────────────────────────────────
+//  CHECKLIST
+// ─────────────────────────────────────────
+const ChecklistModule = {
+  _selectedIcon:'⭐',
+  init() {},
+  render() {
+    const checklist=DB.get('checklist');
+    const container=document.getElementById('checklist-container');
+    const empty=document.getElementById('checklist-empty');
+    if(checklist.length===0){container.innerHTML='';empty.style.display='block';return;}
+    empty.style.display='none';
+    container.innerHTML=checklist.map(cat=>{
+      const tot=cat.items.length, chk=cat.items.filter(i=>i.checked).length;
+      const pct=tot>0?Math.round(chk/tot*100):0;
+      return `
+        <div class="checklist-category" id="cat-${cat.id}">
+          <div class="checklist-cat-header">
+            <div class="cat-name">${cat.icon} ${cat.name}</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="cat-count">${chk}/${tot}</div>
+              <button style="background:rgba(255,255,255,0.2);border:none;color:white;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:11px"
+                onclick="ChecklistModule.deleteCategory('${cat.id}')">✕</button>
+            </div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="fill-${cat.id}" style="width:${pct}%"></div></div>
+          <div class="checklist-items">
+            ${cat.items.map(item=>`
+              <div class="checklist-item ${item.checked?'checked':''}" id="item-${item.id}">
+                <input type="checkbox" ${item.checked?'checked':''} onchange="ChecklistModule.toggleItem('${cat.id}','${item.id}',this.checked)">
+                <span class="item-text">${item.text}</span>
+                <button class="del-item" onclick="ChecklistModule.deleteItem('${cat.id}','${item.id}')"><i class="fa-solid fa-xmark"></i></button>
+              </div>`).join('')}
+            <div class="add-item-row">
+              <input type="text" placeholder="Aggiungi elemento..." id="new-item-${cat.id}"
+                onkeydown="if(event.key==='Enter')ChecklistModule.addItem('${cat.id}')">
+              <button class="btn btn-primary btn-sm" onclick="ChecklistModule.addItem('${cat.id}')"><i class="fa-solid fa-plus"></i></button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  },
+  toggleItem(catId,itemId,checked) {
+    const cl=DB.get('checklist');
+    const cat=cl.find(c=>c.id===catId); if(!cat)return;
+    const item=cat.items.find(i=>i.id===itemId); if(item)item.checked=checked;
+    DB.set('checklist',cl);
+    const el=document.getElementById('item-'+itemId);
+    if(el)el.classList.toggle('checked',checked);
+    const tot=cat.items.length, chk=cat.items.filter(i=>i.checked).length;
+    const pct=tot>0?Math.round(chk/tot*100):0;
+    const fill=document.getElementById('fill-'+catId); if(fill)fill.style.width=pct+'%';
+    const catEl=document.getElementById('cat-'+catId);
+    if(catEl){const cc=catEl.querySelector('.cat-count');if(cc)cc.textContent=`${chk}/${tot}`;}
+    App.updateStats(); DriveModule.syncIfConnected();
+  },
+  addItem(catId) {
+    const input=document.getElementById('new-item-'+catId);
+    const text=input.value.trim(); if(!text)return;
+    const cl=DB.get('checklist'); const cat=cl.find(c=>c.id===catId); if(!cat)return;
+    cat.items.push({id:DB.uid(),text,checked:false});
+    DB.set('checklist',cl); input.value=''; this.render(); App.updateStats();
+  },
+  deleteItem(catId,itemId) {
+    const cl=DB.get('checklist'); const cat=cl.find(c=>c.id===catId); if(!cat)return;
+    cat.items=cat.items.filter(i=>i.id!==itemId);
+    DB.set('checklist',cl); this.render(); App.updateStats();
+  },
+  addCategory() {
+    this._selectedIcon='⭐'; document.getElementById('cat-name').value='';
+    document.querySelectorAll('.cat-icon-btn').forEach(b=>{b.classList.remove('selected');b.classList.add('btn-secondary');});
+    App.openModal('modal-category');
+  },
+  selectIcon(icon,btn) {
+    this._selectedIcon=icon;
+    document.querySelectorAll('.cat-icon-btn').forEach(b=>{b.classList.remove('selected');});
+    btn.classList.add('selected');
+  },
+  saveCategory() {
+    const name=document.getElementById('cat-name').value.trim();
+    if(!name){App.toast('Inserisci un nome!','error');return;}
+    const cl=DB.get('checklist');
+    cl.push({id:DB.uid(),name,icon:this._selectedIcon,items:[]});
+    DB.set('checklist',cl); App.closeModal('modal-category'); this.render();
+    App.toast('Categoria creata!','success');
+  },
+  deleteCategory(catId) {
+    if(!confirm('Eliminare questa categoria e tutti gli elementi?'))return;
+    DB.set('checklist',DB.get('checklist').filter(c=>c.id!==catId));
+    this.render(); App.updateStats(); App.toast('Categoria eliminata');
+  },
+  resetAll() {
+    if(!confirm('Deselezionare tutti gli elementi?'))return;
+    const cl=DB.get('checklist');
+    cl.forEach(cat=>cat.items.forEach(item=>item.checked=false));
+    DB.set('checklist',cl); this.render(); App.updateStats(); App.toast('Reset effettuato');
+  }
+};
+
+// ─────────────────────────────────────────
+//  PASSAGE PLAN
+// ─────────────────────────────────────────
+const PassageModule = {
+  _map:null, _mapPicker:null, _pickerMarker:null, _pickedCoords:null,
+  _routeLine:null, _markers:[],
+  init() {},
+  render() {
+    this.updateStats(); this.renderWaypoints(); this.initMap();
+  },
+  initMap() {
+    if(!this._map) {
+      this._map=L.map('passage-map',{zoomControl:true}).setView([41.9,12.5],5);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(this._map);
+    }
+    this.updateMapMarkers();
+  },
+  updateMapMarkers() {
+    if(!this._map)return;
+    this._markers.forEach(m=>m.remove()); this._markers=[];
+    if(this._routeLine){this._routeLine.remove();this._routeLine=null;}
+    const wps=DB.get('waypoints'); if(wps.length===0)return;
+    const lls=[];
+    wps.forEach((wp,i)=>{
+      const ll=[parseFloat(wp.lat),parseFloat(wp.lon)]; lls.push(ll);
+      const color=i===0?'#27ae60':i===wps.length-1?'#e74c3c':'#1a3a5c';
+      const icon=L.divIcon({className:'',html:`<div style="background:${color};color:white;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13]});
+      const m=L.marker(ll,{icon}).addTo(this._map).bindPopup(`<strong>${wp.name}</strong>${wp.notes?'<br>'+wp.notes:''}`);
+      this._markers.push(m);
+    });
+    if(lls.length>1) this._routeLine=L.polyline(lls,{color:'#1a3a5c',weight:2.5,dashArray:'6,4'}).addTo(this._map);
+    if(lls.length===1) this._map.setView(lls[0],10);
+    else if(lls.length>1) this._map.fitBounds(L.latLngBounds(lls),{padding:[20,20]});
+  },
+  renderWaypoints() {
+    const wps=DB.get('waypoints');
+    const list=document.getElementById('waypoints-list');
+    const empty=document.getElementById('waypoints-empty');
+    if(wps.length===0){list.innerHTML='';empty.style.display='block';return;}
+    empty.style.display='none';
+    list.innerHTML=wps.map((wp,i)=>{
+      const leg=i>0?this.calcLeg(wps[i-1],wp):null;
+      return `
+        <div class="waypoint-item">
+          <div class="waypoint-num">${i+1}</div>
+          <div class="waypoint-name">${wp.name}</div>
+          <div class="waypoint-coords"><i class="fa-solid fa-crosshairs"></i> ${this.formatCoords(wp.lat,wp.lon)}</div>
+          ${wp.notes?`<div style="font-size:13px;color:var(--text-light);margin-bottom:6px">${wp.notes}</div>`:''}
+          ${leg?`<div class="waypoint-leg">
+            <span><i class="fa-solid fa-route"></i> ${leg.dist} nm</span>
+            <span class="bearing-pill"><i class="fa-solid fa-compass"></i> ${leg.bearing}°</span>
+            <span><i class="fa-regular fa-clock"></i> ${leg.eta}</span>
+          </div>`:'<div style="font-size:12px;color:var(--success)"><i class="fa-solid fa-flag"></i> Punto di partenza</div>'}
+          <div class="waypoint-actions">
+            <button class="btn btn-danger btn-sm" onclick="PassageModule.deleteWaypoint('${wp.id}')"><i class="fa-solid fa-trash"></i></button>
+            ${i>0?`<button class="btn btn-secondary btn-sm" onclick="PassageModule.moveWp('${wp.id}',-1)"><i class="fa-solid fa-arrow-up"></i></button>`:''}
+            ${i<wps.length-1?`<button class="btn btn-secondary btn-sm" onclick="PassageModule.moveWp('${wp.id}',1)"><i class="fa-solid fa-arrow-down"></i></button>`:''}
+          </div>
+        </div>`;
+    }).join('');
+  },
+  calcLeg(from,to) {
+    const dist=this.haversine(from.lat,from.lon,to.lat,to.lon);
+    const brg=this.bearing(from.lat,from.lon,to.lat,to.lon);
+    const spd=parseFloat(document.getElementById('pp-speed').value)||6;
+    const h=Math.floor(dist/spd), m=Math.round(((dist/spd)-h)*60);
+    return {dist:dist.toFixed(1),bearing:Math.round(brg),eta:h>0?`${h}h ${m}m`:`${m}m`};
+  },
+  haversine(lat1,lon1,lat2,lon2) {
+    const R=3440.065;
+    const dL=(lat2-lat1)*Math.PI/180, dO=(lon2-lon1)*Math.PI/180;
+    const a=Math.sin(dL/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dO/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  },
+  bearing(lat1,lon1,lat2,lon2) {
+    const dO=(lon2-lon1)*Math.PI/180;
+    const y=Math.sin(dO)*Math.cos(lat2*Math.PI/180);
+    const x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos(dO);
+    return ((Math.atan2(y,x)*180/Math.PI)+360)%360;
+  },
+  formatCoords(lat,lon) {
+    const latD=Math.abs(lat),lonD=Math.abs(lon);
+    const ld=Math.floor(latD),lm=((latD-ld)*60).toFixed(3);
+    const od=Math.floor(lonD),om=((lonD-od)*60).toFixed(3);
+    return `${ld}°${lm}'${lat>=0?'N':'S'}  ${od}°${om}'${lon>=0?'E':'W'}`;
+  },
+  updateStats() {
+    const wps=DB.get('waypoints');
+    document.getElementById('pp-waypoints').textContent=wps.length;
+    let tot=0;
+    for(let i=1;i<wps.length;i++) tot+=this.haversine(wps[i-1].lat,wps[i-1].lon,wps[i].lat,wps[i].lon);
+    document.getElementById('pp-total-dist').textContent=tot.toFixed(1)+' nm';
+    const spd=parseFloat(document.getElementById('pp-speed')?.value)||6;
+    document.getElementById('pp-speed-lbl').textContent=spd+'kn';
+    if(tot>0&&spd>0){
+      const h=tot/spd, d=Math.floor(h/24), hh=Math.floor(h%24), mm=Math.round((h-Math.floor(h))*60);
+      document.getElementById('pp-eta').textContent=d>0?`${d}g ${hh}h`:`${hh}h ${mm}m`;
+    } else document.getElementById('pp-eta').textContent='--';
+  },
+  openAddWaypoint() {
+    ['wp-name','wp-lat','wp-lon','wp-notes','wp-eta-time'].forEach(id=>document.getElementById(id).value='');
+    App.openModal('modal-waypoint');
+  },
+  getGPSForWaypoint() {
+    if(!navigator.geolocation){App.toast('GPS non disponibile','error');return;}
+    App.toast('Rilevamento GPS...');
+    navigator.geolocation.getCurrentPosition(pos=>{
+      document.getElementById('wp-lat').value=pos.coords.latitude.toFixed(6);
+      document.getElementById('wp-lon').value=pos.coords.longitude.toFixed(6);
+      App.toast('Posizione GPS rilevata!','success');
+    },()=>App.toast('GPS non disponibile','error'));
+  },
+  openMapPicker() {
+    App.openModal('modal-mappicker');
+    setTimeout(()=>{
+      if(!this._mapPicker){
+        this._mapPicker=L.map('map-picker').setView([41.9,12.5],5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(this._mapPicker);
+        this._mapPicker.on('click',(e)=>{
+          this._pickedCoords=e.latlng;
+          if(this._pickerMarker)this._pickerMarker.remove();
+          this._pickerMarker=L.marker(e.latlng).addTo(this._mapPicker);
+          document.getElementById('map-picker-coords').innerHTML=
+            `<i class="fa-solid fa-crosshairs" style="color:var(--ocean)"></i> <span>${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}</span>`;
+        });
+      }
+      this._mapPicker.invalidateSize();
+    },300);
+  },
+  confirmMapPicker() {
+    if(!this._pickedCoords){App.toast('Seleziona un punto sulla mappa!','error');return;}
+    document.getElementById('wp-lat').value=this._pickedCoords.lat.toFixed(6);
+    document.getElementById('wp-lon').value=this._pickedCoords.lng.toFixed(6);
+    App.closeModal('modal-mappicker');
+  },
+  saveWaypoint() {
+    const name=document.getElementById('wp-name').value.trim();
+    const lat=parseFloat(document.getElementById('wp-lat').value);
+    const lon=parseFloat(document.getElementById('wp-lon').value);
+    if(!name){App.toast('Inserisci il nome!','error');return;}
+    if(isNaN(lat)||isNaN(lon)){App.toast('Coordinate non valide!','error');return;}
+    if(lat<-90||lat>90||lon<-180||lon>180){App.toast('Coordinate fuori range!','error');return;}
+    const wps=DB.get('waypoints');
+    wps.push({id:DB.uid(),name,lat,lon,notes:document.getElementById('wp-notes').value.trim(),eta:document.getElementById('wp-eta-time').value,createdAt:new Date().toISOString()});
+    DB.set('waypoints',wps);
+    App.closeModal('modal-waypoint');
+    App.toast('Waypoint aggiunto!','success');
+    this.render(); App.updateStats(); DriveModule.syncIfConnected();
+  },
+  deleteWaypoint(id) {
+    if(!confirm('Eliminare questo waypoint?'))return;
+    DB.set('waypoints',DB.get('waypoints').filter(w=>w.id!==id));
+    App.toast('Waypoint eliminato'); this.render(); App.updateStats();
+  },
+  moveWp(id,dir) {
+    const wps=DB.get('waypoints'); const idx=wps.findIndex(w=>w.id===id); if(idx<0)return;
+    const ni=idx+dir; if(ni<0||ni>=wps.length)return;
+    [wps[idx],wps[ni]]=[wps[ni],wps[idx]]; DB.set('waypoints',wps); this.render();
+  },
+  exportGPX() {
+    const wps=DB.get('waypoints'); if(!wps.length){App.toast('Nessun waypoint!','error');return;}
+    const gpx=`<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="VoyageLog" xmlns="http://www.topografix.com/GPX/1/1">\n  <rte>\n    <name>VoyageLog Passage Plan</name>\n${wps.map(wp=>`    <rtept lat="${wp.lat}" lon="${wp.lon}">\n      <name>${wp.name}</name>\n      ${wp.notes?`<desc>${wp.notes}</desc>`:''}\n    </rtept>`).join('\n')}\n  </rte>\n</gpx>`;
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([gpx],{type:'application/gpx+xml'}));
+    a.download='passage_plan.gpx'; a.click();
+    App.toast('GPX esportato!','success');
+  },
+  exportText() {
+    const wps=DB.get('waypoints'); if(!wps.length){App.toast('Nessun waypoint!','error');return;}
+    let txt='PASSAGE PLAN - VoyageLog\n'+'='.repeat(40)+'\nData: '+new Date().toLocaleDateString('it-IT')+'\n\n';
+    wps.forEach((wp,i)=>{
+      txt+=`WP ${i+1}: ${wp.name}\n`;
+      txt+=`  Coord: ${this.formatCoords(wp.lat,wp.lon)}\n`;
+      if(wp.notes)txt+=`  Note: ${wp.notes}\n`;
+      if(i>0){const l=this.calcLeg(wps[i-1],wp);txt+=`  Rotta: ${l.bearing}° | Distanza: ${l.dist} nm | ETA: ${l.eta}\n`;}
+      txt+='\n';
+    });
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));
+    a.download='passage_plan.txt'; a.click();
+    App.toast('Testo esportato!','success');
+  }
+};
+
+// ─────────────────────────────────────────
+//  GOOGLE DRIVE
+// ─────────────────────────────────────────
+const DriveModule = {
+  _accessToken:null, _folderId:null, _syncTimer:null,
+  FOLDER:'VoyageLog', FILE:'voyagelog_data.json',
+  init() { this.updateStatus(); },
+  updateStatus() {
+    const msgEl=document.getElementById('drive-status-msg');
+    const userEl=document.getElementById('drive-user-info');
+    const btnSync=document.getElementById('btn-sync-now');
+    if(this._accessToken){
+      if(msgEl)msgEl.innerHTML='<i class="fa-solid fa-circle-check" style="color:var(--success)"></i> Connesso a Google Drive — i dati si sincronizzano automaticamente.';
+      if(userEl)userEl.textContent='✓ Connesso';
+      if(btnSync)btnSync.style.display='inline-flex';
+    } else {
+      if(msgEl)msgEl.textContent='Non connesso — vai in Impostazioni per sincronizzare su Drive.';
+      if(userEl)userEl.textContent='';
+      if(btnSync)btnSync.style.display='none';
+    }
+  },
+  connect() {
+    const clientId=document.getElementById('s-client-id').value.trim();
+    if(!clientId){App.toast('Inserisci il Client ID!','error');return;}
+    const s=DB.get('settings'); s.driveClientId=clientId; DB.set('settings',s);
+    const load=()=>{
+      this._tokenClient=google.accounts.oauth2.initTokenClient({
+        client_id:clientId,
+        scope:'https://www.googleapis.com/auth/drive.file',
+        callback:(resp)=>{
+          if(resp.error){App.toast('Errore: '+resp.error,'error');return;}
+          this._accessToken=resp.access_token;
+          this.updateStatus(); App.toast('Connesso a Google Drive!','success');
+          this.syncNow();
+        }
+      });
+      this._tokenClient.requestAccessToken();
+    };
+    if(window.google?.accounts?.oauth2){load();}
+    else{
+      const s=document.createElement('script');
+      s.src='https://accounts.google.com/gsi/client';
+      s.onload=load; document.head.appendChild(s);
+    }
+  },
+  disconnect() {
+    this._accessToken=null; this._folderId=null;
+    this.updateStatus(); App.toast('Disconnesso da Drive');
+  },
+  syncIfConnected() {
+    if(!this._accessToken)return;
+    clearTimeout(this._syncTimer);
+    this._syncTimer=setTimeout(()=>this.syncNow(),3000);
+  },
+  async syncNow() {
+    if(!this._accessToken){App.toast('Non connesso a Drive','error');return;}
+    try {
+      if(!this._folderId)this._folderId=await this._findOrCreateFolder();
+      const fileId=await this._findFile(this._folderId);
+      const content=JSON.stringify(DB._data,null,2);
+      if(fileId)await this._updateFile(fileId,content);
+      else await this._createFile(this._folderId,content);
+      App.toast('Sincronizzato con Drive!','success');
+    } catch(e) {
+      console.error(e); App.toast('Errore sincronizzazione Drive','error');
+    }
+  },
+  async _call(url,opts={}) {
+    const r=await fetch(url,{...opts,headers:{'Authorization':'Bearer '+this._accessToken,...(opts.headers||{})}});
+    if(!r.ok)throw new Error(r.status);
+    return r.json();
+  },
+  async _findOrCreateFolder() {
+    const q=`name='${this.FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    const r=await this._call(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+    if(r.files?.length)return r.files[0].id;
+    const c=await this._call('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:this.FOLDER,mimeType:'application/vnd.google-apps.folder'})});
+    return c.id;
+  },
+  async _findFile(folderId) {
+    const q=`name='${this.FILE}' and '${folderId}' in parents and trashed=false`;
+    const r=await this._call(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+    return r.files?.length?r.files[0].id:null;
+  },
+  async _createFile(folderId,content) {
+    const form=new FormData();
+    form.append('metadata',new Blob([JSON.stringify({name:this.FILE,parents:[folderId]})],{type:'application/json'}));
+    form.append('file',new Blob([content],{type:'application/json'}));
+    const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',headers:{'Authorization':'Bearer '+this._accessToken},body:form});
+    if(!r.ok)throw new Error(r.status);
+  },
+  async _updateFile(fileId,content) {
+    const r=await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,{method:'PATCH',headers:{'Authorization':'Bearer '+this._accessToken,'Content-Type':'application/json'},body:content});
+    if(!r.ok)throw new Error(r.status);
+  }
+};
+
+// ─────────────────────────────────────────
+//  START
+// ─────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', ()=>App.init());
+</script>
+</body>
+</html>
