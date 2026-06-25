@@ -1283,7 +1283,7 @@ const PassageModule = {
 //  GOOGLE DRIVE
 // ─────────────────────────────────────────
 const DriveModule = {
-  _accessToken:null, _folderId:null, _syncTimer:null,
+  _accessToken:null, _folderId:null, _syncTimer:null, _refreshTimer:null,
   FOLDER:'VoyageLog', FILE:'voyagelog_data.json',
   init() { this.updateStatus(); setTimeout(()=>this.tryAutoConnect(),1000); },
   updateStatus() {
@@ -1320,6 +1320,7 @@ const DriveModule = {
             return;
           }
           this._accessToken=resp.access_token;
+          this._scheduleRefresh(resp.expires_in);
           this.updateStatus();
           if(!silent)App.toast('Connesso a Google Drive!','success');
           // Prima scarica da Drive, poi sincronizza
@@ -1337,6 +1338,7 @@ const DriveModule = {
   },
   disconnect() {
     this._accessToken=null; this._folderId=null;
+    clearTimeout(this._refreshTimer); this._refreshTimer=null;
     this.updateStatus(); App.toast('Disconnesso da Drive');
   },
   syncIfConnected() {
@@ -1480,6 +1482,19 @@ const DriveModule = {
     };
     document.head.appendChild(sc);
   },
+  _scheduleRefresh(expiresIn) {
+    clearTimeout(this._refreshTimer);
+    // Rinnova 5 minuti prima della scadenza (default Google: 3600s)
+    const delay=((expiresIn||3600)-300)*1000;
+    this._refreshTimer=setTimeout(()=>this._proactiveRefresh(), delay);
+  },
+  async _proactiveRefresh() {
+    const ok=await this._refreshToken();
+    if(!ok){
+      this._accessToken=null; this.updateStatus();
+      App.toast('Sessione Drive scaduta — riconnettiti in Impostazioni','error');
+    }
+  },
   async _refreshToken() {
     return new Promise(resolve=>{
       if(!this._tokenClient){this._accessToken=null;this.updateStatus();resolve(false);return;}
@@ -1487,7 +1502,11 @@ const DriveModule = {
       this._tokenClient.callback=resp=>{
         this._tokenClient.callback=prev;
         if(resp.error){this._accessToken=null;this.updateStatus();resolve(false);}
-        else{this._accessToken=resp.access_token;resolve(true);}
+        else{
+          this._accessToken=resp.access_token;
+          this._scheduleRefresh(resp.expires_in);
+          resolve(true);
+        }
       };
       this._tokenClient.requestAccessToken({prompt:''});
     });
