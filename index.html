@@ -323,6 +323,9 @@
       <div id="text-note-geo" style="margin-top:8px;font-size:12px;color:var(--ocean)"></div>
     </div>
     <p class="section-title">Note salvate (<span id="notes-count">0</span>)</p>
+    <div id="notes-map-wrap" style="margin-bottom:14px;display:none">
+      <div class="map-container" id="notes-map" style="margin-bottom:0"></div>
+    </div>
     <div id="notes-list"></div>
     <div id="notes-empty" class="empty-state" style="display:none">
       <i class="fa-solid fa-note-sticky"></i><p>Nessuna nota ancora.</p>
@@ -638,7 +641,7 @@ const App = {
     const fab = document.getElementById('fab-diary');
     if(fab) fab.style.display = section==='diario'?'flex':'none';
     if(section==='diario') DiarioModule.render();
-    if(section==='note') NoteModule.render();
+    if(section==='note'){NoteModule.render();setTimeout(()=>{if(NoteModule._map)NoteModule._map.invalidateSize();},150);}
     if(section==='checklist') ChecklistModule.render();
     if(section==='rotta'){PassageModule.render();setTimeout(()=>{if(PassageModule._map)PassageModule._map.invalidateSize();},150);}
     if(section==='home') this.updateStats();
@@ -830,17 +833,48 @@ const DiarioModule = {
 // ─────────────────────────────────────────
 const NoteModule = {
   _recorder:null, _chunks:[], _recording:false, _timer:null, _seconds:0,
-  _currentGeo:null, _textNoteGeo:null,
+  _currentGeo:null, _textNoteGeo:null, _map:null, _markers:[],
   init() {},
+  initMap() {
+    if(this._map) return;
+    this._map=L.map('notes-map',{zoomControl:true}).setView([41.9,12.5],5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(this._map);
+  },
+  renderMap(notes) {
+    const withGeo=notes.filter(n=>n.geo);
+    const wrap=document.getElementById('notes-map-wrap');
+    if(withGeo.length===0){wrap.style.display='none';return;}
+    wrap.style.display='block';
+    this.initMap();
+    this._markers.forEach(m=>m.remove()); this._markers=[];
+    withGeo.forEach(n=>{
+      const isAudio=n.type==='audio';
+      const icon=L.divIcon({className:'',
+        html:`<div style="background:${isAudio?'#c0392b':'#1a3a5c'};color:white;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35)"><i class="fa-solid fa-${isAudio?'microphone':'note-sticky'}"></i></div>`,
+        iconSize:[28,28],iconAnchor:[14,14]});
+      const popup=`<div style="min-width:180px;max-width:240px;font-family:inherit">
+        <div style="font-size:11px;color:#666;margin-bottom:5px">${new Date(n.createdAt).toLocaleString('it-IT')}</div>
+        ${n.text?`<div style="font-size:13px;line-height:1.4;margin-bottom:5px">${n.text}</div>`:''}
+        ${n.audioUrl?`<audio controls src="${n.audioUrl}" style="width:100%;height:36px;margin-top:4px"></audio>`:''}
+      </div>`;
+      const m=L.marker([n.geo.lat,n.geo.lon],{icon}).addTo(this._map).bindPopup(popup,{maxWidth:260});
+      this._markers.push(m);
+    });
+    const lls=withGeo.map(n=>[n.geo.lat,n.geo.lon]);
+    if(lls.length===1) this._map.setView(lls[0],12);
+    else this._map.fitBounds(L.latLngBounds(lls),{padding:[30,30]});
+    setTimeout(()=>this._map.invalidateSize(),100);
+  },
   render() {
     const notes=DB.get('notes');
     document.getElementById('notes-count').textContent=notes.length;
     const list=document.getElementById('notes-list');
     const empty=document.getElementById('notes-empty');
-    if(notes.length===0){list.innerHTML='';empty.style.display='block';return;}
-    empty.style.display='none';
     const sorted=[...notes].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
-    list.innerHTML=sorted.map(n=>`
+    if(notes.length===0){list.innerHTML='';empty.style.display='block';}
+    else {
+      empty.style.display='none';
+      list.innerHTML=sorted.map(n=>`
       <div class="note-item">
         <div class="note-header">
           <div class="note-date">${new Date(n.createdAt).toLocaleString('it-IT')}</div>
@@ -850,9 +884,19 @@ const NoteModule = {
         ${n.audioUrl?`<div class="note-audio"><audio controls src="${n.audioUrl}"></audio></div>`:''}
         <div class="note-actions">
           <button class="btn btn-danger btn-sm" onclick="NoteModule.deleteNote('${n.id}')"><i class="fa-solid fa-trash"></i></button>
-          ${n.geo?`<a class="btn btn-secondary btn-sm" href="https://www.openstreetmap.org/?mlat=${n.geo.lat}&mlon=${n.geo.lon}&zoom=15" target="_blank"><i class="fa-solid fa-map"></i> Mappa</a>`:''}
+          ${n.geo?`<button class="btn btn-secondary btn-sm" onclick="NoteModule.focusOnMap('${n.id}')"><i class="fa-solid fa-map-location-dot"></i> Vai alla mappa</button>`:''}
         </div>
       </div>`).join('');
+    }
+    this.renderMap(notes);
+  },
+  focusOnMap(id) {
+    const note=DB.get('notes').find(n=>n.id===id);
+    if(!note||!note.geo||!this._map)return;
+    document.getElementById('notes-map-wrap').scrollIntoView({behavior:'smooth',block:'center'});
+    this._map.setView([note.geo.lat,note.geo.lon],13);
+    const marker=this._markers.find(m=>{const ll=m.getLatLng();return Math.abs(ll.lat-note.geo.lat)<0.00001&&Math.abs(ll.lng-note.geo.lon)<0.00001;});
+    if(marker) setTimeout(()=>marker.openPopup(),400);
   },
   async toggleRecording() {
     if(!this._recording) await this.startRecording();
