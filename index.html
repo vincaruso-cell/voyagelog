@@ -167,6 +167,8 @@
     .checklist-item.checked .item-text { text-decoration: line-through; color: var(--text-light); }
     .del-item { background: none; border: none; color: var(--danger); cursor: pointer; padding: 4px; font-size: 15px; opacity: 0.5; }
     .del-item:hover { opacity: 1; }
+    .move-item { background: none; border: none; color: var(--ocean); cursor: pointer; padding: 4px; font-size: 13px; opacity: 0.5; }
+    .move-item:hover { opacity: 1; }
     .add-item-row { display: flex; gap: 8px; padding: 8px 4px; }
     .add-item-row input { flex: 1; }
     .progress-bar { height: 4px; background: var(--bg); }
@@ -561,6 +563,18 @@
       </div>
     </div>
     <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="ChecklistModule.saveCategory()"><i class="fa-solid fa-check"></i> Crea categoria</button>
+  </div>
+</div>
+
+<!-- Sposta elemento checklist -->
+<div class="modal-overlay" id="modal-move-item">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title"><i class="fa-solid fa-right-left"></i> Sposta elemento</span>
+      <button class="modal-close" onclick="App.closeModal('modal-move-item')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">Scegli la categoria di destinazione:</p>
+    <div id="move-item-cats" style="display:flex;flex-direction:column;gap:8px"></div>
   </div>
 </div>
 
@@ -1018,6 +1032,7 @@ const ChecklistModule = {
               <div class="checklist-item ${item.checked?'checked':''}" id="item-${item.id}">
                 <input type="checkbox" ${item.checked?'checked':''} onchange="ChecklistModule.toggleItem('${cat.id}','${item.id}',this.checked)">
                 <span class="item-text">${item.text}</span>
+                <button class="move-item" title="Sposta in altra categoria" onclick="ChecklistModule.openMovePicker('${cat.id}','${item.id}')"><i class="fa-solid fa-right-left"></i></button>
                 <button class="del-item" onclick="ChecklistModule.deleteItem('${cat.id}','${item.id}')"><i class="fa-solid fa-xmark"></i></button>
               </div>`).join('')}
             <div class="add-item-row">
@@ -1083,6 +1098,34 @@ const ChecklistModule = {
     const cl=DB.get('checklist');
     cl.forEach(cat=>cat.items.forEach(item=>item.checked=false));
     DB.set('checklist',cl); this.render(); App.updateStats(); App.toast('Reset effettuato'); DriveModule.syncIfConnected();
+  },
+  _moveFrom:null, _moveItemId:null,
+  openMovePicker(fromCatId, itemId) {
+    const cl=DB.get('checklist');
+    const fromCat=cl.find(c=>c.id===fromCatId); if(!fromCat)return;
+    const item=fromCat.items.find(i=>i.id===itemId); if(!item)return;
+    this._moveFrom=fromCatId; this._moveItemId=itemId;
+    const container=document.getElementById('move-item-cats');
+    container.innerHTML=cl.filter(c=>c.id!==fromCatId).map(cat=>`
+      <button class="btn btn-secondary" style="width:100%;justify-content:flex-start;gap:12px;font-size:15px"
+        onclick="ChecklistModule.moveItem('${cat.id}')">
+        <span style="font-size:20px">${cat.icon}</span> ${cat.name}
+      </button>`).join('');
+    if(!container.innerHTML) container.innerHTML='<p style="color:var(--text-light);text-align:center;padding:12px">Nessun\'altra categoria disponibile.</p>';
+    App.openModal('modal-move-item');
+  },
+  moveItem(toCatId) {
+    const cl=DB.get('checklist');
+    const fromCat=cl.find(c=>c.id===this._moveFrom); if(!fromCat)return;
+    const idx=fromCat.items.findIndex(i=>i.id===this._moveItemId); if(idx<0)return;
+    const [item]=fromCat.items.splice(idx,1);
+    const toCat=cl.find(c=>c.id===toCatId); if(!toCat)return;
+    toCat.items.push(item);
+    DB.set('checklist',cl);
+    App.closeModal('modal-move-item');
+    this.render(); App.updateStats();
+    App.toast('Elemento spostato in '+toCat.icon+' '+toCat.name,'success');
+    DriveModule.syncIfConnected();
   }
 };
 
