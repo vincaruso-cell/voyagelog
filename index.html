@@ -1290,22 +1290,62 @@ const ChecklistModule = {
     if(!cl.length){App.toast('Nessuna lista da esportare','error');return;}
     const date=new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'});
 
+    // Totali generali
+    let totAll=0, chkAll=0;
+    cl.forEach(cat=>{totAll+=cat.items.length; chkAll+=cat.items.filter(i=>i.checked).length;});
+    const pctAll=totAll>0?Math.round(chkAll/totAll*100):0;
+
+    // Riepilogo per categoria
+    const summaryRows=cl.map(cat=>{
+      const tot=cat.items.length, chk=cat.items.filter(i=>i.checked).length;
+      const pct=tot>0?Math.round(chk/tot*100):0;
+      const barColor=pct===100?'#27ae60':pct>0?'#2980b9':'#dce6f0';
+      return `<tr>
+        <td style="padding:5px 8px;font-size:16px;width:28px">${cat.icon}</td>
+        <td style="padding:5px 8px;font-size:13px;font-weight:500">${cat.name}</td>
+        <td style="padding:5px 8px;width:120px">
+          <div style="background:#e8edf2;border-radius:99px;height:7px;overflow:hidden">
+            <div style="width:${pct}%;height:7px;border-radius:99px;background:${barColor}"></div>
+          </div>
+        </td>
+        <td style="padding:5px 8px;font-size:12px;color:#7f8c8d;text-align:right;white-space:nowrap">${chk}/${tot} &nbsp;(${pct}%)</td>
+      </tr>`;
+    }).join('');
+
+    const summaryHtml=`
+      <div style="border:1px solid #dce6f0;border-radius:8px;margin-bottom:20px;overflow:hidden;break-inside:avoid">
+        <div style="background:#1a3a5c;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:15px">&#x1F4CA; Riepilogo generale</span>
+          <span style="font-size:20px;font-weight:800">${pctAll}%</span>
+        </div>
+        <div style="padding:12px 16px 4px">
+          <div style="background:#e8edf2;border-radius:99px;height:13px;overflow:hidden;margin-bottom:6px">
+            <div style="width:${pctAll}%;height:13px;border-radius:99px;background:linear-gradient(90deg,#2980b9,#27ae60)"></div>
+          </div>
+          <div style="font-size:12px;color:#7f8c8d;margin-bottom:10px">${chkAll} di ${totAll} elementi completati</div>
+          <table style="width:100%;border-collapse:collapse">${summaryRows}</table>
+        </div>
+      </div>`;
+
+    // Categorie con elementi su 2 colonne
     const catsHtml=cl.map(cat=>{
       const tot=cat.items.length, chk=cat.items.filter(i=>i.checked).length;
       const pct=tot>0?Math.round(chk/tot*100):0;
-      const itemsHtml=cat.items.map(item=>`
-        <div class="pdf-item ${item.checked?'pdf-checked':''}">
-          <span class="pdf-checkbox">${item.checked?'☑':'☐'}</span>
-          <span class="pdf-item-text">${item.text}</span>
-        </div>`).join('');
+      const itemsHtml=cat.items.length
+        ? `<div class="pdf-items-grid">${cat.items.map(item=>`
+            <div class="pdf-item${item.checked?' pdf-checked':''}">
+              <span class="pdf-cb">${item.checked?'☑':'☐'}</span>
+              <span class="pdf-it">${item.text}</span>
+            </div>`).join('')}</div>`
+        : '<div style="padding:8px 14px;font-size:12px;color:#999;font-style:italic">Nessun elemento</div>';
       return `
         <div class="pdf-cat">
-          <div class="pdf-cat-header">
+          <div class="pdf-cat-hd">
             <span>${cat.icon} ${cat.name}</span>
-            <span class="pdf-cat-count">${chk}/${tot} &nbsp;(${pct}%)</span>
+            <span class="pdf-cat-ct">${chk}/${tot} &nbsp;(${pct}%)</span>
           </div>
-          <div class="pdf-progress-wrap"><div class="pdf-progress-fill" style="width:${pct}%"></div></div>
-          <div class="pdf-items">${itemsHtml||'<em style="color:#999;font-size:12px">Nessun elemento</em>'}</div>
+          <div style="height:5px;background:#e8edf2"><div style="width:${pct}%;height:5px;background:#27ae60"></div></div>
+          ${itemsHtml}
         </div>`;
     }).join('');
 
@@ -1313,31 +1353,28 @@ const ChecklistModule = {
 <title>VoyageLog — Liste</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#2c3e50;padding:24px;font-size:14px}
-  .pdf-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #1a3a5c;padding-bottom:12px;margin-bottom:20px}
-  .pdf-title{font-size:22px;font-weight:700;color:#1a3a5c}
-  .pdf-title span{color:#f39c12}
-  .pdf-date{font-size:12px;color:#7f8c8d}
-  .pdf-cat{border:1px solid #dce6f0;border-radius:8px;margin-bottom:16px;overflow:hidden;break-inside:avoid}
-  .pdf-cat-header{background:#1a3a5c;color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;font-weight:600;font-size:15px}
-  .pdf-cat-count{font-size:12px;opacity:0.85}
-  .pdf-progress-wrap{height:5px;background:#e8edf2}
-  .pdf-progress-fill{height:5px;background:#27ae60}
-  .pdf-items{padding:6px 14px 10px}
-  .pdf-item{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid #f0f4f8}
-  .pdf-item:last-child{border-bottom:none}
-  .pdf-checkbox{font-size:16px;flex-shrink:0;line-height:1.4}
-  .pdf-item-text{flex:1;line-height:1.5}
-  .pdf-checked .pdf-item-text{text-decoration:line-through;color:#95a5a6}
-  .pdf-footer{margin-top:20px;text-align:center;font-size:11px;color:#bbb;border-top:1px solid #eee;padding-top:10px}
-  @media print{body{padding:12px}@page{margin:1.5cm}}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#2c3e50;padding:24px;font-size:13px}
+  .pdf-hdr{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #1a3a5c;padding-bottom:12px;margin-bottom:18px}
+  .pdf-hdr-title{font-size:22px;font-weight:700;color:#1a3a5c}
+  .pdf-hdr-title span{color:#f39c12}
+  .pdf-cat{border:1px solid #dce6f0;border-radius:8px;margin-bottom:14px;overflow:hidden;break-inside:avoid}
+  .pdf-cat-hd{background:#1a3a5c;color:#fff;padding:9px 14px;display:flex;align-items:center;justify-content:space-between;font-weight:600;font-size:14px}
+  .pdf-cat-ct{font-size:12px;opacity:0.85}
+  .pdf-items-grid{padding:6px 14px 10px;display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+  .pdf-item{display:flex;align-items:baseline;gap:7px;padding:5px 0;border-bottom:1px solid #f0f4f8;break-inside:avoid}
+  .pdf-cb{font-size:15px;flex-shrink:0;line-height:1.3}
+  .pdf-it{flex:1;line-height:1.45;font-size:13px}
+  .pdf-checked .pdf-it{text-decoration:line-through;color:#95a5a6}
+  .pdf-footer{margin-top:18px;text-align:center;font-size:11px;color:#bbb;border-top:1px solid #eee;padding-top:10px}
+  @media print{body{padding:10px}@page{margin:1.5cm;size:A4}}
 </style></head><body>
-<div class="pdf-header">
-  <div class="pdf-title">⚓ <span>Voyage</span>Log — Liste</div>
-  <div class="pdf-date">Stampato il ${date}</div>
+<div class="pdf-hdr">
+  <div class="pdf-hdr-title">&#9875; <span>Voyage</span>Log &mdash; Liste</div>
+  <div style="font-size:12px;color:#7f8c8d">Stampato il ${date}</div>
 </div>
+${summaryHtml}
 ${catsHtml}
-<div class="pdf-footer">VoyageLog — buona navigazione!</div>
+<div class="pdf-footer">VoyageLog &mdash; buona navigazione!</div>
 <script>window.onload=function(){window.print();}<\/script>
 </body></html>`;
 
