@@ -183,6 +183,15 @@
     .add-item-row input { flex: 1; }
     .progress-bar { height: 4px; background: var(--bg); }
     .progress-fill { height: 100%; background: var(--success); transition: width 0.3s; }
+    .summary-card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
+    .summary-total-bar-wrap { background: var(--bg); border-radius: 99px; height: 14px; overflow: hidden; margin: 10px 0 4px; }
+    .summary-total-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--ocean), var(--success)); transition: width 0.4s; }
+    .summary-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--bg); }
+    .summary-row-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+    .summary-row-name { flex: 1; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .summary-row-bar-wrap { width: 90px; flex-shrink: 0; background: var(--bg); border-radius: 99px; height: 7px; overflow: hidden; }
+    .summary-row-bar-fill { height: 100%; border-radius: 99px; background: var(--success); transition: width 0.4s; }
+    .summary-row-count { font-size: 12px; color: var(--text-light); flex-shrink: 0; width: 44px; text-align: right; }
 
     /* Passage Plan */
     .passage-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
@@ -351,6 +360,7 @@
       <button class="btn btn-secondary btn-sm" onclick="ChecklistModule.resetAll()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
       <button class="btn btn-secondary btn-sm" onclick="ChecklistModule.exportPDF()"><i class="fa-solid fa-file-pdf"></i> Salva PDF</button>
     </div>
+    <div id="checklist-summary" style="display:none"></div>
     <div id="checklist-container"></div>
     <div id="checklist-empty" class="empty-state" style="display:none">
       <i class="fa-solid fa-list-check"></i><p>Nessuna lista. Crea una categoria!</p>
@@ -1053,12 +1063,45 @@ const NoteModule = {
 const ChecklistModule = {
   _selectedIcon:'⭐',
   init() {},
+  renderSummary(checklist) {
+    const el=document.getElementById('checklist-summary');
+    if(!checklist.length){el.style.display='none';return;}
+    let totAll=0, chkAll=0;
+    checklist.forEach(cat=>{totAll+=cat.items.length; chkAll+=cat.items.filter(i=>i.checked).length;});
+    const pctAll=totAll>0?Math.round(chkAll/totAll*100):0;
+    const rowsHtml=checklist.map(cat=>{
+      const tot=cat.items.length, chk=cat.items.filter(i=>i.checked).length;
+      const pct=tot>0?Math.round(chk/tot*100):0;
+      const color=pct===100?'var(--success)':pct>0?'var(--ocean)':'var(--border)';
+      return `<div class="summary-row">
+        <span class="summary-row-icon">${cat.icon}</span>
+        <span class="summary-row-name">${cat.name}</span>
+        <div class="summary-row-bar-wrap"><div class="summary-row-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span class="summary-row-count">${chk}/${tot}</span>
+      </div>`;
+    }).join('');
+    el.style.display='block';
+    el.innerHTML=`<div class="summary-card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:700;color:var(--navy);display:flex;align-items:center;gap:8px">
+          <i class="fa-solid fa-chart-simple" style="color:var(--ocean)"></i> Riepilogo
+        </div>
+        <div style="font-size:22px;font-weight:800;color:${pctAll===100?'var(--success)':'var(--navy)'}">${pctAll}%</div>
+      </div>
+      <div class="summary-total-bar-wrap" title="${chkAll} di ${totAll} completati">
+        <div class="summary-total-bar-fill" id="summary-total-fill" style="width:${pctAll}%"></div>
+      </div>
+      <div style="font-size:12px;color:var(--text-light);margin-bottom:6px">${chkAll} di ${totAll} elementi completati</div>
+      ${rowsHtml}
+    </div>`;
+  },
   render() {
     const checklist=DB.get('checklist');
     const container=document.getElementById('checklist-container');
     const empty=document.getElementById('checklist-empty');
-    if(checklist.length===0){container.innerHTML='';empty.style.display='block';return;}
+    if(checklist.length===0){container.innerHTML='';empty.style.display='block';this.renderSummary([]);return;}
     empty.style.display='none';
+    this.renderSummary(checklist);
     container.innerHTML=checklist.map(cat=>{
       const tot=cat.items.length, chk=cat.items.filter(i=>i.checked).length;
       const pct=tot>0?Math.round(chk/tot*100):0;
@@ -1105,7 +1148,7 @@ const ChecklistModule = {
     const fill=document.getElementById('fill-'+catId); if(fill)fill.style.width=pct+'%';
     const catEl=document.getElementById('cat-'+catId);
     if(catEl){const cc=catEl.querySelector('.cat-count');if(cc)cc.textContent=`${chk}/${tot}`;}
-    App.updateStats(); DriveModule.syncIfConnected();
+    this.renderSummary(cl); App.updateStats(); DriveModule.syncIfConnected();
   },
   addItem(catId) {
     const input=document.getElementById('new-item-'+catId);
