@@ -341,9 +341,10 @@
 
   <!-- CHECKLIST -->
   <section id="section-checklist" class="section">
-    <div style="display:flex;gap:8px;margin-bottom:14px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
       <button class="btn btn-primary btn-sm" onclick="ChecklistModule.addCategory()"><i class="fa-solid fa-folder-plus"></i> Nuova categoria</button>
       <button class="btn btn-secondary btn-sm" onclick="ChecklistModule.resetAll()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+      <button class="btn btn-secondary btn-sm" onclick="ChecklistModule.exportPDF()"><i class="fa-solid fa-file-pdf"></i> Salva PDF</button>
     </div>
     <div id="checklist-container"></div>
     <div id="checklist-empty" class="empty-state" style="display:none">
@@ -1195,6 +1196,67 @@ const ChecklistModule = {
     this.render(); App.updateStats();
     App.toast('Elemento spostato in '+toCat.icon+' '+toCat.name,'success');
     DriveModule.syncIfConnected();
+  },
+  exportPDF() {
+    const cl=DB.get('checklist');
+    if(!cl.length){App.toast('Nessuna lista da esportare','error');return;}
+    const date=new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'});
+
+    const catsHtml=cl.map(cat=>{
+      const tot=cat.items.length, chk=cat.items.filter(i=>i.checked).length;
+      const pct=tot>0?Math.round(chk/tot*100):0;
+      const itemsHtml=cat.items.map(item=>`
+        <div class="pdf-item ${item.checked?'pdf-checked':''}">
+          <span class="pdf-checkbox">${item.checked?'☑':'☐'}</span>
+          <span class="pdf-item-text">${item.text}</span>
+        </div>`).join('');
+      return `
+        <div class="pdf-cat">
+          <div class="pdf-cat-header">
+            <span>${cat.icon} ${cat.name}</span>
+            <span class="pdf-cat-count">${chk}/${tot} &nbsp;(${pct}%)</span>
+          </div>
+          <div class="pdf-progress-wrap"><div class="pdf-progress-fill" style="width:${pct}%"></div></div>
+          <div class="pdf-items">${itemsHtml||'<em style="color:#999;font-size:12px">Nessun elemento</em>'}</div>
+        </div>`;
+    }).join('');
+
+    const html=`<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
+<title>VoyageLog — Liste</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#2c3e50;padding:24px;font-size:14px}
+  .pdf-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #1a3a5c;padding-bottom:12px;margin-bottom:20px}
+  .pdf-title{font-size:22px;font-weight:700;color:#1a3a5c}
+  .pdf-title span{color:#f39c12}
+  .pdf-date{font-size:12px;color:#7f8c8d}
+  .pdf-cat{border:1px solid #dce6f0;border-radius:8px;margin-bottom:16px;overflow:hidden;break-inside:avoid}
+  .pdf-cat-header{background:#1a3a5c;color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;font-weight:600;font-size:15px}
+  .pdf-cat-count{font-size:12px;opacity:0.85}
+  .pdf-progress-wrap{height:5px;background:#e8edf2}
+  .pdf-progress-fill{height:5px;background:#27ae60}
+  .pdf-items{padding:6px 14px 10px}
+  .pdf-item{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid #f0f4f8}
+  .pdf-item:last-child{border-bottom:none}
+  .pdf-checkbox{font-size:16px;flex-shrink:0;line-height:1.4}
+  .pdf-item-text{flex:1;line-height:1.5}
+  .pdf-checked .pdf-item-text{text-decoration:line-through;color:#95a5a6}
+  .pdf-footer{margin-top:20px;text-align:center;font-size:11px;color:#bbb;border-top:1px solid #eee;padding-top:10px}
+  @media print{body{padding:12px}@page{margin:1.5cm}}
+</style></head><body>
+<div class="pdf-header">
+  <div class="pdf-title">⚓ <span>Voyage</span>Log — Liste</div>
+  <div class="pdf-date">Stampato il ${date}</div>
+</div>
+${catsHtml}
+<div class="pdf-footer">VoyageLog — buona navigazione!</div>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+
+    const win=window.open('','_blank');
+    if(!win){App.toast('Permetti i popup per salvare il PDF','error');return;}
+    win.document.write(html);
+    win.document.close();
   }
 };
 
